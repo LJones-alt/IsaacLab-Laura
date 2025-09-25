@@ -69,6 +69,10 @@ x-default-isaac-lab-volumes: &default-isaac-lab-volumes
   - type: bind
     source: .isaac-lab-docker-history
     target: ${DOCKER_USER_HOME}/.bash_history
+  - type: bind
+    source: /usr/share/nvidia/nvoptix.bin
+    target: /usr/share/nvidia/nvoptix.bin
+    read_only: true
 
 x-default-isaac-lab-environment: &default-isaac-lab-environment
   - ISAACSIM_PATH=${DOCKER_ISAACLAB_PATH}/_isaac_sim
@@ -106,6 +110,10 @@ services:
     entrypoint: bash
     stdin_open: true
     tty: true
+    devices:
+    - /dev/hidraw0:/dev/hidraw0
+    - /dev/hidraw1:/dev/hidraw1
+   # - /dev/hidraw2:/dev/hidraw2
 
   # This service adds a ROS2 Humble
   # installation on top of the base image
@@ -135,6 +143,10 @@ services:
     entrypoint: bash
     stdin_open: true
     tty: true
+    devices:
+    - /dev/hidraw0:/dev/hidraw0
+    - /dev/hidraw1:/dev/hidraw1
+   # - /dev/hidraw2:/dev/hidraw2
 
 volumes:
   # isaac-sim
@@ -151,3 +163,5 @@ volumes:
   isaac-lab-docs:
   isaac-lab-logs:
   isaac-lab-data:
+  isaac-lan-ros2:
+

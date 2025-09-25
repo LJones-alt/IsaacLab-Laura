@@ -146,7 +146,8 @@ def main():
                 env=env,
                 robot=env.scene["robot"],
                 config=planner_config,  # Pass the config object
-                env_id=env_id,  # Pass environment ID
+                env_id=env_id,  # Pass environment ID,
+                #debug=True
             )
 
         env.cfg.datagen_config.use_skillgen = True

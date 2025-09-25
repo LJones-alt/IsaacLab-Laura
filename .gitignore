@@ -13,6 +13,12 @@
 **/*.usda
 **/*.usdc
 **/*.usdz
+**/*.urdf
+
+#no path files 
+**/*.pth
+**/*.hdf5
+**/*.txt
 
 # Python
 .DS_Store
@@ -63,6 +69,8 @@ _build
 
 # Teleop Recorded Dataset
 /datasets/
+/franka_robotiq/
+/source/isaaclab_assets/
 
 # Tests
 tests/

@@ -117,7 +117,7 @@ class CuroboPlannerCfg:
     enable_graph_attempt: int = 5
     """Number of graph planning attempts."""
 
-    max_planning_attempts: int = 15
+    max_planning_attempts: int = 100
     """Maximum number of planning attempts."""
 
     enable_finetune_trajopt: bool = True
@@ -391,14 +391,14 @@ class CuroboPlannerCfg:
             grasp_gripper_open_val=0.04,
             approach_distance=0.0,
             retreat_distance=0.0,
-            max_planning_attempts=1,
+            max_planning_attempts=100,
             time_dilation_factor=0.6,
             enable_finetune_trajopt=True,
             n_repeat=None,
             motion_step_size=None,
             visualize_spheres=False,
             visualize_plan=False,
-            debug_planner=False,
+            debug_planner=True,
             sphere_update_freq=5,
             motion_noise_scale=0.02,
             # World extraction tuning for Franka envs
@@ -436,6 +436,22 @@ class CuroboPlannerCfg:
         config.surface_sphere_radius = 0.01
         config.get_world_config = lambda: config._get_world_config_with_table_adjustment()
         return config
+    
+    ### Add in Chem pickup style
+    @classmethod
+    def franka_beaker_config(cls) -> "CuroboPlannerCfg":
+        """Create configuration for Franka stacking a normal cube."""
+        config = cls.franka_config()
+        config.static_objects = ["table"]
+        config.visualize_plan = True
+        config.debug_planner = True
+        config.motion_noise_scale = 0.02
+        config.collision_activation_distance = 0.0
+        config.approach_distance = 0.05
+        config.retreat_distance = 0.05
+        config.surface_sphere_radius = 0.005
+        config.get_world_config = lambda: config._get_world_config_with_table_adjustment()
+        return config
 
     @classmethod
     def from_task_name(cls, task_name: str) -> "CuroboPlannerCfg":
@@ -453,6 +469,8 @@ class CuroboPlannerCfg:
             return cls.franka_stack_cube_bin_config()
         elif "stack-cube" in task_lower:
             return cls.franka_stack_cube_config()
+        elif "Cube-Mimic" in task_lower:
+            return cls.franka_beaker_config()
         else:
             # Default to Franka configuration
             print(f"Warning: Unknown robot in task '{task_name}', using Franka configuration")

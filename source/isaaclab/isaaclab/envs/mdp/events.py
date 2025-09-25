@@ -133,7 +133,7 @@ def randomize_rigid_body_scale(
 
             # set the new scale
             scale_spec.default = Gf.Vec3f(*rand_samples[i])
-
+            print(f"Set object scale : {rand_samples[i]}")
             # ensure the operation is done in the right ordering if we created the scale attribute.
             # otherwise, we assume the scale attribute is already in the right order.
             # note: by default isaac sim follows this ordering for the transform stack so any asset
@@ -1300,6 +1300,7 @@ def reset_scene_to_default(env: ManagerBasedEnv, env_ids: torch.Tensor, reset_jo
         # obtain default and deal with the offset for env origins
         default_root_state = rigid_object.data.default_root_state[env_ids].clone()
         default_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+        #print(f"[RESET] Scene RESET, obj {rigid_object} orientation {default_root_state}")
         # set into the physics simulation
         rigid_object.write_root_pose_to_sim(default_root_state[:, :7], env_ids=env_ids)
         rigid_object.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids=env_ids)

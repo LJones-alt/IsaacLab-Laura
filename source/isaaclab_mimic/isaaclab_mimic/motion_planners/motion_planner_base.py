@@ -36,7 +36,7 @@ class MotionPlannerBase(ABC):
     """
 
     def __init__(
-        self, env: ManagerBasedEnv, robot: Articulation, env_id: int = 0, debug: bool = False, **kwargs
+        self, env: ManagerBasedEnv, robot: Articulation, env_id: int = 0, debug: bool = True, **kwargs
     ) -> None:
         """Initialize the motion planner.
 

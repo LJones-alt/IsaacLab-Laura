@@ -16,7 +16,9 @@ from .franka_stack_ik_rel_mimic_env_cfg import FrankaCubeStackIKRelMimicEnvCfg
 from .franka_stack_ik_rel_skillgen_env_cfg import FrankaCubeStackIKRelSkillgenEnvCfg
 from .franka_stack_ik_rel_visuomotor_cosmos_mimic_env_cfg import FrankaCubeStackIKRelVisuomotorCosmosMimicEnvCfg
 from .franka_stack_ik_rel_visuomotor_mimic_env_cfg import FrankaCubeStackIKRelVisuomotorMimicEnvCfg
-
+from .cube_blueprint_mimic_env_cfg import CubeBlueprintMimicEnvCfg
+from .cube_mimic_env_cfg import CubeMimicEnvCfg
+from .cube_mimic_env import CubeMimicEnv
 ##
 # Inverse Kinematics - Relative Pose Control
 ##
@@ -164,6 +166,26 @@ gym.register(
     entry_point=f"{__name__}.pick_place_mimic_env:PickPlaceRelMimicEnv",
     kwargs={
         "env_cfg_entry_point": f"{__name__}.agibot_place_toy2box_mimic_env_cfg:RmpFlowAgibotPlaceToy2BoxMimicEnvCfg",
+    },
+    disable_env_checker=True,
+)
+
+###### cube stuff
+
+gym.register(
+    id="Cube-Mimic-v0",
+    entry_point="isaaclab_mimic.envs:CubeMimicEnv",
+    kwargs={
+        "env_cfg_entry_point": cube_mimic_env_cfg.CubeMimicEnvCfg,
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
+    id="Cube-Blueprint-Mimic-v0",
+    entry_point="isaaclab_mimic.envs:CubeMimicEnv",
+    kwargs={
+        "env_cfg_entry_point": cube_blueprint_mimic_env_cfg.CubeBlueprintMimicEnvCfg,
     },
     disable_env_checker=True,
 )
