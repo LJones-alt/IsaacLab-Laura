@@ -71,7 +71,7 @@ _build
 /datasets/
 /franka_robotiq/
 /source/isaaclab_assets/
-
+/docs/source
 # Tests
 tests/
 
