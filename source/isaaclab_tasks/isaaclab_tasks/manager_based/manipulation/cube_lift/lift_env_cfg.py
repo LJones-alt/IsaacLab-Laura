@@ -143,8 +143,8 @@ class ObservationsCfg():
         #robot_pose=ObsTerm(func=mdp.robot_pose)
         #object_to_target = ObsTerm(func=mdp.position_command_error)
         #norm_error = ObsTerm(func=mdp.object_goal_norm_error)
-        abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
-        object_knocked = ObsTerm(func=mdp.object_knocked)
+       # abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
+        #object_knocked = ObsTerm(func=mdp.object_knocked)
         def __post_init__(self):
             self.enable_corruption = False
             self.concatenate_terms = False
@@ -225,7 +225,7 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.05, 0.1)},
+            "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.02, 0.05)},
             "velocity_range": {},
             "asset_cfg": SceneEntityCfg("object", body_names="Object"),
         },
@@ -242,6 +242,10 @@ class EventCfg:
             "scale_range": {"x": (0.5, 0.5), "y": (0.5, 0.5), "z": (0.6, 0.7)},
             "asset_cfg": SceneEntityCfg("object", body_names="Object"),
         },
+    #     params={
+    #         "scale_range": {"x": (1.0, 1.0), "y": (1.0, 1.0), "z": (1.0, 1.0)},
+    #         "asset_cfg": SceneEntityCfg("object", body_names="Object"),
+    #     },
     )
 
 
@@ -298,6 +302,7 @@ class TerminationsCfg:
     object_dropping = DoneTerm(
         func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("object")}
     )
+    object_tipped = DoneTerm(func=mdp.object_knocked)
     #fix object dropping
     success = DoneTerm(func=mdp.object_near_goal)
 

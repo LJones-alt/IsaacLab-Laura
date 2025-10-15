@@ -263,13 +263,13 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
     #config.algo.transformer.num_heads = 1
     for model_num in range(ensemble_size):
         # setup a wand run
-        wand_experiment_name = f"{config.experiment.name}-model{model_num}"
+        wand_experiment_name = f"{config.experiment.name}-model_{model_num}"
         run=wandb.init(
             project=config.experiment.logging.wandb_proj_name,
             name=wand_experiment_name
         )
-        #run.define_metric("train reward", step_metric="episode")
-       # run.define_metric("episode error", step_metric="episode")
+      #  run.define_metric("train reward", step_metric="episode")
+      #  run.define_metric("episode error", step_metric="episode")
         # reset best valid loss
         best_valid_loss = None
 
@@ -278,7 +278,7 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
         video_dir = video_dirs[model_num]
 
         # setup logger stuff
-        # logger = Logger(os.path.join(log_dir, "log.txt"))
+        #logger = Logger(os.path.join(log_dir, "log.txt"))
         # sys.stdout = logger
         # sys.stderr = logger
         data_logger = DataLogger(log_dir, config=config, log_tb=config.experiment.logging.log_tb, log_wandb=config.experiment.logging.log_wandb)
@@ -286,6 +286,7 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
             json.dump(config, outfile, indent=4)
 
         # initialise current network in the ensemble
+        
         model = algo_factory(
             algo_name=config.algo_name,
             config=config,
@@ -371,7 +372,7 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
             mem_usage = int(process.memory_info().rss / 1000000)
             data_logger.record("System/RAM Usage (MB)", mem_usage, epoch)
             print(f"\nEpoch {epoch} Memory Usage: {mem_usage} MB\n")
-
+        run.finish()
         #config.algo.transformer.num_layers = config.algo.transformer.num_layers + 1
         #config.algo.transformer.num_heads = config.algo.transformer.num_heads + 1
        # run.finish()
@@ -439,16 +440,16 @@ def main(args: argparse.Namespace):
     for stream in (sys.stdout, sys.stderr):
         if not hasattr(stream, "isatty"):
             stream.isatty = lambda: False
-    os.environ["WANDB_MODE"] = "offline"
-    run=wandb.init(
-        project=config.experiment.logging.wandb_proj_name,
-        name=config.experiment.name
-    )
+    #os.environ["WANDB_MODE"] = "offline"
+    # run=wandb.init(
+    #     project=config.experiment.logging.wandb_proj_name,
+    #     name=config.experiment.name
+    # )
     # run.define_metric("train reward", step_metric="episode")
     # run.define_metric("episode error", step_metric="episode")
 
     # change location of experiment directory
-    config.train.output_dir = os.path.abspath(os.path.join("./logs", args.log_dir, args.task))
+    config.train.output_dir = os.path.abspath(os.path.join("", args.log_dir, args.task))
     original_output_dir = config.train.output_dir
     
     log_dirs, ckpt_dirs, video_dirs = [], [], []
@@ -490,7 +491,7 @@ def main(args: argparse.Namespace):
     except Exception as e:
         res_str = f"run failed with error:\n{e}\n\n{traceback.format_exc()}"
     print(res_str)
-    run.finish()
+   # run.finish()
 
 
 if __name__ == "__main__":

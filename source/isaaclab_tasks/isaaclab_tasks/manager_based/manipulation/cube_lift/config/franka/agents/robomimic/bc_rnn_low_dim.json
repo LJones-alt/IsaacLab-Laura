@@ -1,13 +1,13 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "bc_new_demos",
+        "name": "bc_med_data_",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": true,
             "log_tb": true,
             "log_wandb": true,
-            "wandb_proj_name": "Lift_beaker_new_demos"
+            "wandb_proj_name": "Lift_beaker_new_demos_med_qual"
         },
         "save": {
             "enabled": true,
@@ -20,7 +20,7 @@
         },
         "epoch_every_n_steps": 100,
         "validation_epoch_every_n_steps": 10,
-        "env": "Dev-IK-Rel-v0",
+        "env": "Dev-IK-Rel-v1",
         "additional_envs": null,
         "render": false,
         "render_video": true,
@@ -36,8 +36,8 @@
     },
     "train": {
         "data": null,
-        "output_dir": "/training_runs/bc_rnn",
-        "num_data_workers": 1,
+        "output_dir": "docs/training_runs/bc_rnn",
+        "num_data_workers": 4,
         "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_normalize_obs": false,
@@ -76,7 +76,7 @@
             "l1_weight": 0.0,
             "cos_weight": 0.0
         },
-        "actor_layer_dims": [],
+        
         "gmm": {
             "enabled": true,
             "num_modes": 10,
@@ -84,9 +84,7 @@
             "std_activation": "softplus",
             "low_noise_eval": true
         },
-         "vae": {
-            "enabled": false
-        },
+        
         "rnn": {
             "enabled": true,
             "horizon": 10,
@@ -97,21 +95,8 @@
             "kwargs": {
                 "bidirectional": false
             }
-        },
-        "transformer": {
-            "enabled": false,
-            "context_length": 10,
-            "embed_dim": 512,
-            "num_layers": 6,
-            "num_heads": 8,
-            "emb_dropout": 0.1,
-            "attn_dropout": 0.1,
-            "block_output_dropout": 0.1,
-            "sinusoidal_embedding": false,
-            "activation": "gelu",
-            "supervise_all_steps": false,
-            "nn_parameter_for_timesteps": true
         }
+        
     },
     "observation": {
         "modalities": {

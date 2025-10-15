@@ -81,9 +81,13 @@ class HDF5DatasetFileHandler(DatasetFileHandlerBase):
     def get_env_name(self) -> str | None:
         """Get the environment name."""
         self._raise_if_not_initialized()
-        env_args = json.loads(self._hdf5_data_group.attrs["env_args"])
-        if "env_name" in env_args:
-            return env_args["env_name"]
+        try:
+            env_args = json.loads(self._hdf5_data_group.attrs["env_args"])
+            if "env_name" in env_args:
+                return env_args["env_name"]
+            
+        except:
+            return "Cube-Mimic-v0"
         return None
 
     def get_episode_names(self) -> Iterable[str]:

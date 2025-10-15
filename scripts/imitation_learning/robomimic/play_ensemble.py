@@ -313,39 +313,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
                 if bool(success_term.func(env, **success_term.params)[0]):
                     return True, traj, recovery_activated_during_rollout
                  
-                    #     while rec_i < recovery_duration:
-        #   #      print("In recovery")
-        #         recovery.append(True)
-        #         robot.set_joint_position_target(safe_pos) # expects an absolute joint position
-        #         env.scene.write_data_to_sim()
-        #         env.sim.step()
 
-        #         # Check if robot reached the safe position within a small tolerance
-        #         new_joint_positions = get_joint_pos(env)
-        #         target_joint_positions = safe_pos
-                
-        #         position_error = torch.abs(new_joint_positions - target_joint_positions)
-        #         position_errors.append(position_error)
-        #         tolerance = 1e-2 
-                 
-        #         # check if the positon/position error has converged to the safe position (it wont reach it exactly). 
-        #         # it also jumps to it straight away but if you stop straight away you get weird jerky motion and it doesnt actually reach the safe position 
-        #         # check every 50 iterations
-        #         if rec_i % 50 == 0:
-        #             reached_safe_pos_early = False
-        #             if position_errors.maxlen == len(position_errors):
-        #                 for pe in position_errors:
-        #                     if torch.all(torch.abs(pe - position_error)  < tolerance):
-        #                         reached_safe_pos_early = True
-        #             if reached_safe_pos_early:
-        #                 print(f"Reached safe position early.")
-        #                 break
-        #             # else extend the recovery duration
-        #             if rec_i == recovery_duration - 1:
-        #                 print("Extending Recovery Duration")
-        #                 recovery_duration += 50
-                
-        #         rec_i += 1
 
             print(f"Recovery Mode Ended")
             print("Recovery Cooldown Activated")
@@ -691,7 +659,8 @@ def main():
     # load the stack cube ensemble
     # stack_cube_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/stack_cube_ensemble.txt')    
     
-    pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/ensembles.txt')
+    #pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/ensembles.txt')
+    pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/high_qual_ensembles.txt')
     # pick_place_ensemble_30 = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/pick_place_ensemble_30_paths.txt')
  
 

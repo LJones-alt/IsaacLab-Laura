@@ -14,7 +14,7 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 from isaaclab_tasks.manager_based.manipulation.cube_lift import mdp
 from isaaclab_tasks.manager_based.manipulation.cube_lift.lift_env_cfg import CubeEnvCfg
-#from isaaclab_assets.glassware.glassware_objects import Chem_Assets
+from isaaclab_assets.glassware.glassware import ChemistryGlassware
 
 
 import math
@@ -71,9 +71,13 @@ class FrankaDevEnvCfg(CubeEnvCfg):
         self.commands.object_pose.body_name = "panda_hand"
         self.commands.object_pose.body_name = "panda_hand"
 
-       # glassware = Chem_Assets()
+        glassware = ChemistryGlassware()
         # Set each stacking cube deterministically
-        #self.scene.object = glassware.beaker(pos=[0.5, 0.0, 0.01],name="Object")
+        self.scene.object = glassware.beaker(pos=[0.5, 0.0, 0.02], rot=[0, 0, 1, 0],name="Object")
+        #self.scene.object = glassware.flask(pos=[0.5, 0.0, 0.03], rot=[0, 0, 1, 0],name="Object", scale=(0.7,0.7,0.7))
+        #self.scene.stirplate = glassware.stirplate(pos=[0.5, 0.0, 0.01])
+        #self.scene.object = glassware.vial(pos=[0.5, 0.0, 0.02], rot=[0, 0, 1, 0],name="Object")
+        
         #### everything else leave default
         # self.scene.flask = glassware.flask()
         # self.scene.vial = glassware.vial()
@@ -83,22 +87,22 @@ class FrankaDevEnvCfg(CubeEnvCfg):
        # self.scene.obstacle = glassware.cube_obs(pos= [0.8, -0.8, 0.0],rot=[0, 0, 1, 0], name="cube_obs")
         #self.scene.obstacle = glassware.stirplate(pos= [0.5, -0.32, 0.0],rot=[0.707, 0, 0, -0.707], name="cube_obs")
        # self.scene.obstacle =  glassware.stirplate(pos= [0.8, -0.8, 0.0], rot=[0.707, 0, 0, -0.707], name="cube_obs")
-        self.scene.object = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Object",
-            init_state=RigidObjectCfg.InitialStateCfg( pos=[0.5, 0.0, 0.02],rot=[0, 0, 1, 0]),
-            spawn=UsdFileCfg(
-                usd_path=f"source/isaaclab_assets/isaaclab_assets/glassware/beaker/beaker.usd",
-                scale=(0.5, 0.5, 0.5),
-                rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    disable_gravity=False,
-                ),
-            ),
-        )
+        # self.scene.object = RigidObjectCfg(
+        #     prim_path="{ENV_REGEX_NS}/Object",
+        #     init_state=RigidObjectCfg.InitialStateCfg( pos=[0.5, 0.0, 0.02],rot=[0, 0, 1, 0]),
+        #     spawn=UsdFileCfg(
+        #         usd_path=f"source/isaaclab_assets/isaaclab_assets/glassware/beaker/beaker.usd",
+        #         scale=(0.5, 0.5, 0.5),
+        #         rigid_props=RigidBodyPropertiesCfg(
+        #             solver_position_iteration_count=16,
+        #             solver_velocity_iteration_count=1,
+        #             max_angular_velocity=1000.0,
+        #             max_linear_velocity=1000.0,
+        #             max_depenetration_velocity=5.0,
+        #             disable_gravity=False,
+        #         ),
+        #     ),
+        # )
         # Listens to the required transforms
         marker_cfg = FRAME_MARKER_CFG.copy()
         marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
