@@ -27,6 +27,9 @@ parser = argparse.ArgumentParser(description="Tutorial on using the differential
 parser.add_argument("--robot", type=str, default="franka_panda", help="Name of the robot.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 # append AppLauncher cli args
+
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
+
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
@@ -38,7 +41,7 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import torch
-
+import robomimic.utils.torch_utils as TorchUtils
 import isaaclab.sim as sim_utils
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
@@ -50,69 +53,81 @@ from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import subtract_frame_transforms
 from isaaclab.assets import RigidObjectCfg, ArticulationCfg
-
+from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 ##
 # Pre-defined configs
 ##
+import gymnasium as gym
+import torch
 from isaaclab_assets import FRANKA_PANDA_HIGH_PD_CFG, UR10_CFG  # isort:skip
+from isaaclab_tasks.utils import parse_env_cfg
+from isaaclab_tasks.manager_based.manipulation.lift.lift_env_cfg import LiftEnvCfg
+# @configclass
+# class TableTopSceneCfg(InteractiveSceneCfg):
+#     """Configuration for a cart-pole scene."""
 
+#     # ground plane
+#     ground = AssetBaseCfg(
+#         prim_path="/World/defaultGroundPlane",
+#         spawn=sim_utils.GroundPlaneCfg(),
+#         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.05)),
+#     )
 
-@configclass
-class TableTopSceneCfg(InteractiveSceneCfg):
-    """Configuration for a cart-pole scene."""
+#     # lights
+#     dome_light = AssetBaseCfg(
+#         prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
+#     )
 
-    # ground plane
-    ground = AssetBaseCfg(
-        prim_path="/World/defaultGroundPlane",
-        spawn=sim_utils.GroundPlaneCfg(),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.05)),
-    )
+#     # mount
+#     table = AssetBaseCfg(
+#         prim_path="{ENV_REGEX_NS}/Table",
+#         spawn=sim_utils.UsdFileCfg(
+#             usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/Stand/stand_instanceable.usd", scale=(2.0, 2.0, 2.0)
+#         ),
+#     )
 
-    # lights
-    dome_light = AssetBaseCfg(
-        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
-    )
-
-    # mount
-    table = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Table",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/Stand/stand_instanceable.usd", scale=(2.0, 2.0, 2.0)
-        ),
-    )
-
-    # articulation
-    if args_cli.robot == "franka_panda":
-        robot = FRANKA_PANDA_HIGH_PD_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot", init_state=ArticulationCfg.InitialStateCfg(
-                joint_pos={
+#     # articulation
+#     if args_cli.robot == "franka_panda":
+#         robot = FRANKA_PANDA_HIGH_PD_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot", init_state=ArticulationCfg.InitialStateCfg(
+#                 joint_pos={
                     
-                    "panda_joint1":  0.3281,
-                    "panda_joint2": -0.3684,   
-                    "panda_joint3":  -0.2787,
-                    "panda_joint4": -2.6138,  
-                    "panda_joint5":  -2.7527,
-                    "panda_joint6":  2.4991,  #  +90° → keeps hand level
-                    "panda_joint7":  0.3331,
-                    "panda_finger_joint1": 0.04,   # open gripper
-                    "panda_finger_joint2": 0.04,
-                }
-            ),
-        )
-    elif args_cli.robot == "ur10":
-        robot = UR10_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-    else:
-        raise ValueError(f"Robot {args_cli.robot} is not supported. Valid: franka_panda, ur10")
+#                     "panda_joint1":  0.3281,
+#                     "panda_joint2": -0.3684,   
+#                     "panda_joint3":  -0.2787,
+#                     "panda_joint4": -2.6138,  
+#                     "panda_joint5":  -2.7527,
+#                     "panda_joint6":  2.4991,  #  +90° → keeps hand level
+#                     "panda_joint7":  0.3331,
+#                     "panda_finger_joint1": 0.04,   # open gripper
+#                     "panda_finger_joint2": 0.04,
+#                 }
+#             ),
+#         )
+#     elif args_cli.robot == "ur10":
+#         robot = UR10_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+#     else:
+#         raise ValueError(f"Robot {args_cli.robot} is not supported. Valid: franka_panda, ur10")
 
 
-def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
+def run_simulator(env):
     """Runs the simulation loop."""
     # Extract scene entities
     # note: we only do this here for readability.
     robot = scene["robot"]
-
-    # Create controller
     diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
-    diff_ik_controller = DifferentialIKController(diff_ik_cfg, num_envs=scene.num_envs, device=sim.device)
+    diff_ik_controller = DifferentialIKController(diff_ik_cfg, num_envs=env.unwrapped.scene.num_envs, device=sim.device)
+    
+    diff_ik_action_controller = DifferentialInverseKinematicsActionCfg(
+            asset_name="robot",
+            joint_names=["panda_joint.*"],
+            body_name="panda_hand",
+            controller=diff_ik_controller,
+            scale=0.5,
+            body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
+        )
+    # Create controller
+   # diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
+    #diff_ik_controller = DifferentialIKController(diff_ik_cfg, num_envs=scene.num_envs, device=sim.device)
 
     # Markers
     frame_marker_cfg = FRAME_MARKER_CFG.copy()
@@ -205,19 +220,27 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 def main():
     """Main function."""
     # Load kit helper
-    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device=args_cli.device)
-    sim = sim_utils.SimulationContext(sim_cfg)
+
+    env_cfg: LiftEnvCfg = parse_env_cfg(
+        "Dev-IK-Rel-v1",
+        device=args_cli.device,
+        num_envs=args_cli.num_envs,
+        use_fabric=not args_cli.disable_fabric,
+    )
+    # create environment
+    env = gym.make("Isaac-Lift-Cube-Franka-IK-Abs-v0", cfg=env_cfg)
+    # reset environment at start
+    env.reset()
     # Set main camera
     sim.set_camera_view([2.5, 2.5, 2.5], [0.0, 0.0, 0.0])
     # Design scene
-    scene_cfg = TableTopSceneCfg(num_envs=args_cli.num_envs, env_spacing=2.0)
-    scene = InteractiveScene(scene_cfg)
+    
     # Play the simulator
     sim.reset()
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
-    run_simulator(sim, scene)
+    run_simulator(env)
 
 
 if __name__ == "__main__":

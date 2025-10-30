@@ -29,6 +29,8 @@ from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Evaluate robomimic policy for Isaac Lab environment.")
+parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
+parser.add_argument("--video_length", type=int, default=800, help="Length of the recorded video (in steps).")
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
@@ -86,8 +88,14 @@ if args_cli.enable_pinocchio:
 
 from isaaclab_tasks.utils import parse_env_cfg
 #from isaaclab.utils.logging_helper import LoggingHelper, ErrorType, LogType
-from isaaclab.utils.math import matrix_from_quat, convert_quat
+from isaaclab.utils.math import matrix_from_quat, convert_quat, quat_mul, euler_xyz_from_quat
 from evaluation import ensemble_uncertainty
+from isaaclab.safety.switchingLogic import SwitchingLogic
+from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
+from isaaclab.utils.math import subtract_frame_transforms, euler_xyz_from_quat
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
+
 #import chills.tasks
 #from chills.tasks.mdp import upright_tilt_deg
 
@@ -110,7 +118,7 @@ def rollout(policy, env, success_term, horizon, device):
     #print(f"obs_dict type: {type(obs_dict)},\nobs_dict contents:\n {obs_dict}")
 
     traj = dict(actions=[], obs=[], next_obs=[], sub_obs=[], uncertainties=[])
-
+    
     for i in range(horizon):
         # Prepare observations
         obs = copy.deepcopy(obs_dict["policy"])
@@ -210,7 +218,21 @@ def has_fallen(asset, threshold: float = -0.7, debug: bool = True) -> bool:
 
     return uprightness > threshold
 
-def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, use_recovery=True, rollout_num=0):
+# this took me too long to work out i needed lol
+
+def quaternion_to_euler(q_w, q_x, q_y, q_z):
+    # Roll (x-axis rotation)
+    roll = math.atan2(2 * (q_w * q_x + q_y * q_z), 1 - 2 * (q_x**2 + q_y**2))
+    
+    # Pitch (y-axis rotation)
+    pitch = math.asin(2 * (q_w * q_y - q_z * q_x))
+    
+    # Yaw (z-axis rotation)
+    yaw = math.atan2(2 * (q_w * q_z + q_x * q_y), 1 - 2 * (q_y**2 + q_z**2))
+    
+    return roll, pitch, yaw
+
+def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  use_recovery=True, rollout_num=0):
     """Perform a single rollout of the policy in the environment.
 
     Args:
@@ -232,29 +254,65 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
 
     traj = dict(actions=[], obs=[], next_obs=[], sub_obs=[], 
                 uncertainties=[], min_actions=[], max_actions=[],
-                time_taken=[], joint_pos=[], recovery=[])
+                time_taken=[], joint_pos=[], recovery=[], failure=[], grasp=[], appr=[])
    
-    joints_to_check = [0, 1, 2, 3, 4, 5, 6]
-    unsafe_windows_detected = {joint_num: 0 for joint_num in joints_to_check}
-    windows = {joint_num: deque(maxlen=parameters[joint_num]['window_size']) for joint_num in joints_to_check} 
-    certain_timestep = 50
+    ###### SETUP SWITCHING LOGIC ####
+    switchingLogic = SwitchingLogic(parameters, horizon=horizon)
+    
+    sim = env.unwrapped.sim
+    num_envs = env.num_envs
+
+
     certain_joint_positions = []
 
     ### SET USE RECOVERY TO FALSE   ####
-    use_recovery=False
+    use_recovery=True
     recovery_activated_during_rollout = 0
+    # Set up recovery controller 
+    robot = env.unwrapped.scene["robot"]
+    print(f"Unwrapped sim : {sim}")
+    ee_recovery_pos = torch.tensor([[0.5206, 0.0096, 0.3751]], device=device)
+
+    ee_recovery_rot = torch.tensor([[ 0.6664,  0.0360,  0.7414, -0.0705]], device=device)
+    # lets change this into the 6 element tensor they are expecting 
+    roll,pitch,yaw = euler_xyz_from_quat(ee_recovery_rot)
+    ee_recovery_goal = torch.cat([ee_recovery_pos, ee_recovery_rot], dim =-1)
+    print(f"I got this roll {roll}, pitch {pitch}, yaw {yaw} and full tensor {torch.cat([roll, pitch, yaw], dim=-1)}\n i need to add with {ee_recovery_pos}")
+    ee_rpy = torch.cat([roll, pitch, yaw], dim=-1)
+    ee_rpy = ee_rpy.unsqueeze(0)
+    ee_goal = torch.cat([ee_recovery_pos, ee_rpy], dim=1)
+    # Create controller
+    diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
+    diff_ik_controller = DifferentialIKController(diff_ik_cfg, num_envs=env.unwrapped.scene.num_envs, device=sim.device)
+    
+    # diff_ik_action_controller = DifferentialInverseKinematicsActionCfg(
+    #         asset_name="robot",
+    #         joint_names=["panda_joint.*"],
+    #         body_name="panda_hand",
+    #         controller=diff_ik_controller,
+    #         scale=0.5,
+    #         body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
+    #     )
+    robot_entity_cfg = SceneEntityCfg("robot", joint_names=["panda_joint.*"], body_names=["panda_hand"])
+    robot_entity_cfg.resolve(env.unwrapped.scene)
+    if robot.is_fixed_base:
+        ee_jacobi_idx = robot_entity_cfg.body_ids[0] - 1
+    else:
+        ee_jacobi_idx = robot_entity_cfg.body_ids[0]
+    
 #########SET TO FALSE #######
-    recovery_mode = False
+    recovery_mode = True
     print("rollout recovery enabled ? : ", use_recovery)
-    recovery_duration = 100
-    recovery_cooldown_duration = 100 # timesteps
+    
+    recovery_cooldown_duration = 300 # timesteps
     recovery_cooldown_timer = recovery_cooldown_duration
     recovery_cooldown_active = False
     recovery = []
+    recovery_steps = 0
+    print(f'Running for horizon {horizon}')
     for i in range(horizon):
         # Prepare observations
-        if bool(success_term.func(env, **success_term.params)[0]):
-            return True, traj, recovery_activated_during_rollout
+      
         obs = copy.deepcopy(obs_dict["policy"])
         sub_obs = copy.deepcopy(obs_dict["subtask_terms"])
         object = env.unwrapped.scene["object"]
@@ -266,7 +324,8 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
         
         for subob in sub_obs:
             sub_obs[subob] = torch.squeeze(sub_obs[subob])
-
+        if obs['object_knocked']:
+            print("object knocked over")
         # Check if environment image observations
         if hasattr(env.cfg, "image_obs_list"):
             # Process image observations for robomimic inference
@@ -281,104 +340,119 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
 
         traj["obs"].append(obs)
         traj["sub_obs"].append(sub_obs)
+        
         object=env.unwrapped.scene['object']
         #tilt_deg = upright_tilt_deg(object.data.root_quat_w, object.data.default_root_state[:, 3:7])
         #print("Tilt deg  : ", tilt_deg.item())
-        if recovery_mode:
-            print(f"Recovery Mode Started at Timestep {i}")
-            robot = env.unwrapped.scene["robot"]
-            tmp_pos = get_joint_pos(env)
-           # print("Temp, gripper a pos : ", tmp_pos[0][7])
-            #print("Temp, gripper b pos : ", tmp_pos[0][8])
-            safe_pos = None
-            if object_grasped(env):
-                # mid safe place - should help with the task of moving the beaker to the target
-                safe_pos = torch.tensor([[0.2932,  0.2640, -0.3573, -2.6099, -2.8971,  2.0274,  0.8245, tmp_pos[0][7], tmp_pos[0][8]]]).to(device)
-            else:
-                # origin
-                safe_pos = torch.tensor([[ 0.405,0.35,-0.22,-3,-2.85,math.pi/2,0.9, tmp_pos[0][7],tmp_pos[0][8]]]).to(device)# safe_pos = certain_joint_positions[-certain_timestep]
-            position_errors = deque(maxlen=50)
-            rec_i = 0
+        if recovery_mode and not recovery_cooldown_active:
+            print(f"[Recovery] Mode  Timestep {i}")
+          
+            jacobian = robot.root_physx_view.get_jacobians()[:, ee_jacobi_idx, :, robot_entity_cfg.joint_ids]
+            ee_pose_w = robot.data.body_pose_w[:, robot_entity_cfg.body_ids[0]]
+            root_pose_w = robot.data.root_pose_w
+            joint_pos = robot.data.joint_pos[:, robot_entity_cfg.joint_ids]
 
-            current = get_joint_pos(env)
-            target = safe_pos
-            steps = 200   # increase for slower motion
+            # current EE pose in base frame
+            ee_pos_b, ee_quat_b = subtract_frame_transforms(
+                root_pose_w[:, 0:3], root_pose_w[:, 3:7],
+                ee_pose_w[:, 0:3], ee_pose_w[:, 3:7]
+            )
+            print(f"ee_pos_b {ee_pos_b}, ee_quat_b : {ee_quat_b}")
 
-            for alpha in np.linspace(0, 1, steps):
-                recovery.append(True)
-                intermediate = (1 - alpha) * current + alpha * target
-                robot.set_joint_position_target(intermediate)
+            # target EE pose (absolute, world frame → base frame)
+            target_pos_w = ee_recovery_pos     # [1,3]
+            target_quat_w = ee_recovery_rot    # [1,4]
+            target_pos_b, target_quat_b = subtract_frame_transforms(
+                root_pose_w[:, 0:3], root_pose_w[:, 3:7],
+                target_pos_w, target_quat_w
+            )
+            print(f"target_pos_b {target_pos_b}, target_quat_b {target_quat_b}")
+
+            # --- compute relative pose command (6D) ---
+            # translation delta
+            delta_pos = target_pos_b - ee_pos_b    # [1,3]
+            print(f"Delta pos {delta_pos}")
+            # rotation delta (ΔR = R_target * R_currentᵀ)
+            delta_rot = target_quat_b - ee_quat_b
+            print(f"Delat Rot {delta_rot}")
+            # convert ΔR to euler angles (XYZ convention)
+            r,p,y = euler_xyz_from_quat(delta_rot, wrap_to_2pi=False)
+            print(f"[DEBUG] Delat R {r}, P {p}, Y {y}")
+            delta_rpy = torch.cat([r,p,y], dim=-1)
+            delta_rpy = torch.unsqueeze(delta_rpy,0)
+            print(f"[DEBUG] RPY {delta_rpy}")
+            # --- build relative command ---
+            ee_goal = torch.cat([delta_pos, delta_rpy], dim=-1)  # [1,6]
+
+           
+            # debug info
+            print(f"[DEBUG] ee_goal (Δx,Δy,Δz,Δr,Δp,Δy): {ee_goal}")
+            print(f"[DEBUG] Current pos_b: {ee_pos_b}")
+            print(f"[DEBUG] Target pos_b: {target_pos_b}")
+
+            # --- send command to controller ---
+            diff_ik_controller.set_command(ee_goal, ee_pos_b, ee_quat_b)
+
+            # compute joint targets
+            joint_pos_des = diff_ik_controller.compute(ee_pos_b, ee_quat_b, jacobian, joint_pos)
+
+            # (optional) denormalize actions if necessary
+            if args_cli.norm_factor_min is not None and args_cli.norm_factor_max is not None:
+                actions = ((actions + 1) * (args_cli.norm_factor_max - args_cli.norm_factor_min)) / 2 + args_cli.norm_factor_min
+
+            # --- execute recovery movement ---
+            pos_err = torch.norm(target_pos_b - ee_pos_b)
+            actions=joint_pos_des
+            metrics = ensemble_uncertainty(ensemble, obs)
+            metrics['min']=actions
+            metrics['max']=actions
+            uncertainty = 0
+
+            if pos_err > 1e-3:
+                robot.set_joint_position_target(joint_pos_des, joint_ids=robot_entity_cfg.joint_ids)
                 env.scene.write_data_to_sim()
-                env.sim.step()
-                if bool(success_term.func(env, **success_term.params)[0]):
-                    return True, traj, recovery_activated_during_rollout
-                 
+                obs_dict, _, terminated, truncated, _ = env.step(joint_pos_des)
+            else:
+                print(f"[Recovery] Target reached — ending recovery mode.")
+                recovery_mode = False
+                recovery_cooldown_active = True
+                print("[Recovery] Cooldown Activated.")
 
-
-            print(f"Recovery Mode Ended")
-            print("Recovery Cooldown Activated")
-            recovery_mode = False
-            recovery_cooldown_active = True
-            obs_dict, _, terminated, truncated, _ = env.step(torch.tensor([0 for _ in range(7)]).to(device).view(1, env.action_space.shape[1]))
-            obs = copy.deepcopy(obs_dict["policy"])
-            for ob in obs:
-                obs[ob] = torch.squeeze(obs[ob])
-            ensemble_uncertainty(ensemble, obs)
+                
         else:
+            env.unwrapped.actions.arm_action = DifferentialInverseKinematicsActionCfg(
+                asset_name="robot",
+                joint_names=["panda_joint.*"],
+                body_name="panda_hand",
+                controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),
+                scale=0.5,
+                body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
+            )
+            recovery_steps=0
             # Calculate uncertainty using the ensemble
             recovery.append(False)
-            if bool(success_term.func(env, **success_term.params)[0]):
-                return True, traj, recovery_activated_during_rollout
-            ## detect if we have tipped the object 
             
+            ## detect if we have tipped the object 
 
             metrics = ensemble_uncertainty(ensemble, obs)
             # Get the std and mean action
             uncertainty = metrics['variance']
             actions = metrics['mean']
 
-            # Add the uncertainty to all joint windows
-            for joint_num, unc in enumerate(uncertainty):
-                windows[joint_num].append(unc)
 
-            for joint_num in joints_to_check:
-                unc_threshold = parameters[joint_num]['unc_threshold']
-                peaks = sum(1 for curr_unc in windows[joint_num] if curr_unc > unc_threshold)
-                if peaks > parameters[joint_num]['max_peaks']:
-                    unsafe_windows_detected[joint_num] += 1
+            # uncert went here
             
-            
-            for joint_num in joints_to_check:
-                ## less worried after the object grasped
-                if unsafe_windows_detected[joint_num] > parameters[joint_num]['max_uncertain_windows'] and not recovery_cooldown_active:
-                        print(f"Joint {joint_num} is uncertain at timestep {i}, uncertainty is {uncertainty[joint_num]}")
-                        unsafe_windows_detected[joint_num] = 0
-                        if use_recovery:
-                            recovery_mode = True
-                            recovery_activated_during_rollout += 1
-                # if object_grasped(env):
-                    
-                # else : 
-                #      ## more strict when grasping
-                #      if (unsafe_windows_detected[joint_num] > (parameters[joint_num]['max_uncertain_windows']-1)) and not recovery_cooldown_active:
-                #         print(f"Object not grapsed, using more strict uncertainty Joint {joint_num} is uncertain at timestep {i}, uncertainty is {uncertainty[joint_num]}")
-                #         unsafe_windows_detected[joint_num] = 0
-                #         if obs_dict['subtask_terms']['appr_goal'].item():
-                #             # then we are placing the object , do not recover 
-                #             print("not activating recovery, object at goal")
-                #         elif use_recovery:
-                #             recovery_mode = True
-                #             recovery_activated_during_rollout += 1
 
-            if use_recovery and not recovery_cooldown_active:
-               # print("not holding object, check if not hit it")
-               # print("observed tilt " , obs_dict['policy']['object_tilt'])
-                # if obs_dict['policy']['object_tilt'].item() > 5.0:
-                #     print("Ucertainties when tilt : ",uncertainty)
-                #     print("Object tilted, activating no tilt recovery ")
-                #     print("observed tilt " , obs_dict['policy']['object_tilt'])
-                recovery_mode =True
+            if switchingLogic.check(uncertainty, i) and not recovery_cooldown_active:
+                if use_recovery :
+                    recovery_mode = True
                 recovery_activated_during_rollout+=1
+           
+            #check halfway thorough, if we havent managed grasp, lets reset and try again
+            if switchingLogic.halfway_check(i,sub_obs['grasp'].item()):
+                if use_recovery and not recovery_cooldown_active:
+                    recovery_mode = True
+
 
             if recovery_cooldown_active:
                 if object_grasped(env):
@@ -404,39 +478,62 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
                 actions = (
                     (actions + 1) * (args_cli.norm_factor_max - args_cli.norm_factor_min)
                 ) / 2 + args_cli.norm_factor_min
-
+           # print(f"before shaping action : {actions}")
             actions = actions.to(device=device).view(1, env.action_space.shape[1])
             # print(f"------------------------------")
-            # print(f"Policy action :  {actions.tolist()}")
+           # print(f"Policy action {actions.shape} :  {actions}")
             
             # Apply actions
             obs_dict, _, terminated, truncated, _ = env.step(actions)
-            obs = obs_dict["policy"]
-            sub_obs = obs_dict["subtask_terms"]
-            # print(f"Obs change : {obs}")
-            # Record trajectory
-            traj["actions"].append(actions.tolist())
-            traj["next_obs"].append(obs)
-            traj['uncertainties'].append(uncertainty)
-            traj['max_actions'].append(metrics['max'])
-            traj['min_actions'].append(metrics['min'])
-            traj['time_taken'].append(metrics['time_taken'])
-            traj['joint_pos'].append(obs['abs_joint_pos'])
-            traj['recovery'].append(recovery)
-            
+        obs = obs_dict["policy"]
+        sub_obs = obs_dict["subtask_terms"]
+        # print(f"Obs change : {obs}")
+        # Record trajectory
+        traj["actions"].append(actions.tolist())
+        traj["next_obs"].append(obs)
+        traj['uncertainties'].append(uncertainty)
+        traj['max_actions'].append(metrics['max'])
+        traj['min_actions'].append(metrics['min'])
+        traj['time_taken'].append(metrics['time_taken'])
+        traj['joint_pos'].append(obs['abs_joint_pos'])
+        traj['recovery'].append(recovery)
 
-            # Check if rollout was successful
-            if bool(success_term.func(env, **success_term.params)[0]):
-                return True, traj, recovery_activated_during_rollout
-            elif terminated or truncated:
-                return False, traj, recovery_activated_during_rollout
+        # Check if rollout was successful
+        if bool(success_term.func(env, **success_term.params)[0]):
+            traj['failure'].append(" ")
+            grasp = torch.any(sub_obs['grasp'])
+            traj['grasp'].append(grasp.item())
+            appr = torch.any(sub_obs['appr_goal'])
+            traj['appr'].append(appr.item())
+            print(f"grasp : {traj['grasp']}, appr : {traj['appr']}")
+            # print(f"grasp : {grasp.item()}, appr : {appr.item()}")
+            return True, traj, recovery_activated_during_rollout
+        
+        elif terminated or truncated:
+            
+            grasp = torch.any(sub_obs['grasp'])
+            traj['grasp'].append(grasp.item())
+            appr = torch.any(sub_obs['appr_goal'])
+            traj['appr'].append(appr.item())
+            #print(f"grasp : {traj['grasp']}, appr : {traj['appr']}")
+            if obs['object_knocked']:
+                
+                #if the failure was caused by object collision
+                traj['failure'].append("knocked")
+            else:
+                #if failure due to timeout, record timeout
+                traj['failure'].append("timeout")
+            return False, traj, recovery_activated_during_rollout
     #print("REcovery : ", traj["recovery"])
+    traj['failure'].append("timeout")
+    grasp = torch.any(sub_obs['grasp'])
+    traj['grasp'].append(grasp.item())
+    appr = torch.any(sub_obs['appr_goal'])
+    traj['appr'].append(appr.item())
     return False, traj, recovery_activated_during_rollout
 
 
-def safety():
-    print(f"I'm Uncertain. {random.randint(0, 100)}")
-    return True
+
 
 def rollout_transformer(policy, env, success_term, horizon, device):
     """Perform a single rollout of the policy in the environment, supporting sequence-based models."""
@@ -584,19 +681,6 @@ def rollout_transformer(policy, env, success_term, horizon, device):
 
     return False, traj
 
-# ./isaaclab.sh -p scripts/imitation_learning/robomimic/play.py \
-# --device cuda --task Isaac-Stack-Cube-Franka-IK-Rel-v0 --num_rollouts 50 \
-# --checkpoint /logs/docs/Models/bc/model1/Isaac-Stack-Cube-Franka-IK-Rel-v0/bc_rnn_low_dim_franka_stack/20250715152224/models/model_epoch_2000.pth
-
-
-# ./isaaclab.sh -p scripts/imitation_learning/robomimic/play.py --device cuda --task Isaac-Stack-Cube-Franka-IK-Rel-v0 --num_rollouts 10 --checkpoint logs/docs/Models/bc/model2/Isaac-Stack-Cube-Franka-IK-Rel-v0/bc_rnn_low_dim_franka_stack/20250715152538/models/model_epoch_2000.pth --headless
-
-
-
-# ./isaaclab.sh -p scripts/imitation_learning/robomimic/train.py \
-# --task Isaac-Stack-Cube-Franka-IK-Rel-v0 --algo bc \
-# --dataset ./docs/training_data/generated_dataset_split.hdf5 --logdir ./logs/docs/Models/bc/model8/
-
 
 
 def load_ensemble(device, ensemble_path):
@@ -636,8 +720,7 @@ def main():
     #create a log handler 
    # loghelper = LoggingHelper()
 
-    # Set termination conditions
-    env_cfg.terminations.time_out = None
+    
 
     # Disable recorder
     env_cfg.recorders = None
@@ -646,10 +729,14 @@ def main():
     success_term = env_cfg.terminations.success
     env_cfg.terminations.success = None
 
+    # Get timeout signal 
+    timeout = env_cfg.terminations.time_out
+    #env_cfg.terminations.time_out = None
+
     # Create environment
     env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
 
-    # Set seed
+    # Set seed9
     torch.manual_seed(args_cli.seed)
     env.seed(args_cli.seed)
 
@@ -657,151 +744,51 @@ def main():
     device = TorchUtils.get_torch_device(try_to_use_cuda=True)
 
     # load the stack cube ensemble
-    # stack_cube_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/stack_cube_ensemble.txt')    
+    # stack_cube_ensemble = load_ensembl*--------------e(device, ensemble_path='scripts/imitation_learning/robomimic/stack_cube_ensemble.txt')    
     
     #pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/ensembles.txt')
-    pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/high_qual_ensembles.txt')
+    pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/med_ensembles.txt')
     # pick_place_ensemble_30 = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/pick_place_ensemble_30_paths.txt')
  
-
+    # Lets set these to the 0.99 confidence
     parameters = {
-        'stack_cube': {
-             6: {
-                'unc_threshold': 0.05,
-                'max_peaks': 15,
-                'window_size': 30,
-                'max_uncertain_windows': 3
+        'beaker_lift' :{
+            0 : {
+                "confidence_level": 0.017165569182596162,
+                "window_size": 5,
+                "max_peaks": 5
             },
-            5: {
-                'unc_threshold': 0.06,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
+            1 : {
+                "confidence_level": 0.024839555704716736,
+                "window_size": 12,
+                "max_peaks": 4
             },
-
-            4: {
-                'unc_threshold': 0.04,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
+            2 : {
+                "confidence_level": 0.022856649849482057,
+                "window_size": 12,
+                "max_peaks": 5
             },
-            3: {
-                'unc_threshold': 0.04,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
+            3 : {
+                "confidence_level": 0.03564607457876469,
+                "window_size": 9,
+                "max_peaks": 5
             },
-            2: {
-                'unc_threshold': 0.04,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
+            4 : {
+                "confidence_level": 0.03087440802734071,
+                "window_size": 10,
+                "max_peaks": 3
             },
-            1: {
-                'unc_threshold': 0.04,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
+            5 : {
+                "confidence_level": 0.02323877457883784,
+                "window_size": 5,
+                "max_peaks": 4
             },
-            0: {
-                'unc_threshold': 0.04,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            }
+            6 : {
+                "confidence_level": 0.8432899916370529,
+                "window_size": 13,
+                "max_peaks": 4
+            },
         },
-        
-         'pick_place': {
-            6: {
-                'unc_threshold': 0.05,
-                'max_peaks': 15,
-                'window_size': 30,
-                'max_uncertain_windows': 3
-            },
-            5: {
-                'unc_threshold': 0.02,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 1
-            },
-
-            4: {
-                'unc_threshold': 0.03,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-            3: {
-                'unc_threshold': 0.03,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-            2: {
-                'unc_threshold': 0.02,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-            1: {
-                'unc_threshold': 0.03,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-            0: {
-                'unc_threshold': 0.03,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            }
-
-        },
-        'stack_beaker': {
-            6: {
-                'unc_threshold': 0.05,
-                'max_peaks': 15,
-                'window_size': 30,
-                'max_uncertain_windows': 3
-            },
-            5: {
-                'unc_threshold': 0.02,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-
-            4: {
-                'unc_threshold': 0.03,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-            3: {
-                'unc_threshold': 0.03,
-                'max_peaks': 5,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-            2: {
-                'unc_threshold': 0.02,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-            1: {
-                'unc_threshold': 0.03,
-                'max_peaks': 5,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-            0: {
-                'unc_threshold': 0.03,
-                'max_peaks': 2,
-                'window_size': 10,
-                'max_uncertain_windows': 3
-            },
-        }
     }
 
     model_arch = "BC_RNN_GMM"
@@ -827,11 +814,7 @@ def main():
     os.makedirs(uncertainty_results_path, exist_ok=True)
     os.makedirs(trajectory_results_path, exist_ok=True)
 
-    # try:
-    #     os.remove(rollout_log_path)
-    # except FileNotFoundError as filenotfounderror:
-    #     pass
-    
+
     # clear files
     clear_files(
         uncertainties_path, actions_path, 
@@ -839,32 +822,22 @@ def main():
         time_taken_path, recovery_activated_during_rollout_path
     )
     
-    #clear uncertainties file
-    with open(uncertainties_path, 'w') as file:
-        pass
-    with open(actions_path, 'w') as file:
-        pass
-    with open(min_actions_path, 'w') as file:
-        pass
-    with open(max_actions_path, 'w') as file:
-        pass
-    with open(time_taken_path, 'w') as file:
-        pass
-    with open(recovery_activated_during_rollout_path, 'w') as file:
-        pass
-    # clear rollout logger file
-    #with open(loghelper.namefile, 'w') as file:
-     #   pass
-    
     # Run policy
     results = []
+    failed_no_intervention =[]
+    intervention = []
+    intervention_success = []
+    intervention_failure = []
     for trial in range(args_cli.num_rollouts):
         print(f"[INFO] Starting trial {trial}")
 
-        terminated, traj, recovery_activated_during_rollout = rollout_ensemble(pick_place_ensemble[:args_cli.ensemble_size], env, success_term, args_cli.horizon, device, parameters['pick_place'], use_recovery=args_cli.use_recovery, rollout_num=trial)
+        terminated, traj, recovery_activated_during_rollout = rollout_ensemble(pick_place_ensemble[:args_cli.ensemble_size], env, success_term, args_cli.horizon, device, parameters['beaker_lift'], use_recovery=args_cli.use_recovery, rollout_num=trial)
         # save the uncertainties
         print("Finished rollout, recovery needed : ", recovery_activated_during_rollout)
         #print("actions shape : ", traj['actions'])
+        
+        if not terminated:
+            print(f"failure : {traj['failure']}")
         for j in range(7):
             with open(f"docs/rollouts/rollout_logging_no_recovery_joint{j}.txt", "a") as file:
                 #file.write(f"Logs for joint {j}\n")
@@ -876,53 +849,53 @@ def main():
                     uncert = str(traj['uncertainties'][i].tolist()[j])
                     #print("joint pos : ", str(traj['joint_pos'][i][0].tolist()[j]))
                     joint_pos = str(traj['joint_pos'][i][0].tolist()[j])
-                    recovery = str(traj['recovery'][0][i])
+                    recovery = "False"#str(traj['recovery'][0][i])
                    # print("writing recovery : ", recovery)
                     line = f"{i} : {act} : {max} : {min} : {uncert} : {joint_pos}: {recovery}: {terminated}\n"
                     file.write(line)
-        
-
+        # this logs the outcome of the rollout - the failure methods
         for j in range(7):
             joint_uncert = [t[j].item() for t in traj['uncertainties']]
             with open(f"docs/rollouts/rollout_uncerts_joint{j}.txt", "a") as f:
                 line = ",".join(["{:.10f}".format(v) for v in joint_uncert])
                 f.write(line + f" : {terminated} \n")
+       # for i in range(len(traj['failure'])):
+        with open(f"docs/rollouts/rollout_outcomes.txt", "a") as file:
+            if terminated:
+               # print(f"grasp : {traj['grasp']}, appr : {traj['appr']}")
+                #trialnum : outcome  : recovery needed ? : failure mode : grasp subtask : appr subtask
+                line=f"{trial}: {terminated} : {recovery_activated_during_rollout} : : {True} : {True} \n"
+            else : 
+                grasp = traj['grasp'][0]
+                appr = traj['appr'][0]
+                print(f"Subatask : {grasp} , {appr}")
+                line=f"{trial} : {terminated} : {recovery_activated_during_rollout} : {traj['failure'][0]} : {grasp} : {appr}\n" 
+               # print(f"grasp : {traj['grasp'][0]}, appr : {traj['appr'][0]}")
+            file.write(line)
 
-        with open(uncertainties_path, 'a') as file:
-            for i, var in enumerate(traj['uncertainties']):
-                line = " ".join([str(v.item()) for v in var]) + f" {terminated}\n"
-                file.write(f"{str(i)} {line}")
-        # save the actions
-        with open(actions_path, 'a') as file:
-            for i, var in enumerate(traj['actions']):
-                line = " ".join([str(v) for v in var[0]]) + f" {terminated}\n"
-                file.write(f"{str(i)} {line}")
-        # save the max actions
-        with open(max_actions_path, 'a') as file:
-            for i, var in enumerate(traj['max_actions']):
-                line = " ".join([str(v.item()) for v in var[0]]) + f" {terminated}\n"
-                file.write(f"{str(i)} {line}")
-        # save the min actions
-        with open(min_actions_path, 'a') as file:
-            for i, var in enumerate(traj['min_actions']):
-                line = " ".join([str(v.item()) for v in var[0]]) + f" {terminated}\n"
-                file.write(f"{str(i)} {line}")
-        # save time taken
-        with open(time_taken_path, 'a') as file:
-            for i, time_taken in enumerate(traj['time_taken']):
-                line = f"{str(time_taken)} {terminated}\n"
-                file.write(f"{str(i)} {line}")
-        # save recovery activated
-        with open("recovery_actions.txt", 'a') as file:
-            file.write(f"{trial} {recovery_activated_during_rollout} {terminated}\n")
-
-            
+        
         results.append(terminated)
+        if not terminated:
+            if recovery_activated_during_rollout <=0:
+                failed_no_intervention.append(1)
+
+        if recovery_activated_during_rollout > 0:
+            intervention.append(1)
+            if terminated:
+                intervention_success.append(1)
+            else:
+                intervention_failure.append(1)
+        else:
+            intervention.append(0)
+        print(f'Current rate {results.count(True)/len(results)}')
         print(f"[INFO] Trial {trial}: {terminated}\n")
         #loghelper.stopEpoch(trial)
 
     print(f"\nSuccessful trials: {results.count(True)}, out of {len(results)} trials")
     print(f"Success rate: {results.count(True) / len(results)}")
+    print(f'Failed runs with no intervention : {sum(failed_no_intervention)}')
+    print(f"Intervention rate : {sum(intervention)/len(intervention)}. Of which success : {sum(intervention_success)}, of which failed {sum(intervention_failure)}")
+    
     print(f"Trial Results: {results}\n")
 
 

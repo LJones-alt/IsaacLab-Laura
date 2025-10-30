@@ -143,8 +143,8 @@ class ObservationsCfg():
         #robot_pose=ObsTerm(func=mdp.robot_pose)
         #object_to_target = ObsTerm(func=mdp.position_command_error)
         #norm_error = ObsTerm(func=mdp.object_goal_norm_error)
-       # abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
-        #object_knocked = ObsTerm(func=mdp.object_knocked)
+        abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
+        object_knocked = ObsTerm(func=mdp.object_knocked)
         def __post_init__(self):
             self.enable_corruption = False
             self.concatenate_terms = False
@@ -300,7 +300,7 @@ class TerminationsCfg:
     #joint_effort = DoneTerm(func=mdp.joint_effort_out_of_limit)
 
     object_dropping = DoneTerm(
-        func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("object")}
+        func=mdp.root_height_below_minimum, params={"minimum_height": 0, "asset_cfg": SceneEntityCfg("object")}
     )
     object_tipped = DoneTerm(func=mdp.object_knocked)
     #fix object dropping

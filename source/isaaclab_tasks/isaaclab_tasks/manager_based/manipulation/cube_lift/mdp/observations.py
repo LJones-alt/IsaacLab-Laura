@@ -161,14 +161,14 @@ def is_object_lifted(
 def ee_frame_pos(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")) -> torch.Tensor:
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     ee_frame_pos = ee_frame.data.target_pos_w[:, 0, :] - env.scene.env_origins[:, 0:3]
-
+    #print(f"EE pos : {ee_frame_pos}")
     return ee_frame_pos
 
 
 def ee_frame_quat(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")) -> torch.Tensor:
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     ee_frame_quat = ee_frame.data.target_quat_w[:, 0, :]
-
+    #print(f"EE pos : {ee_frame_quat}")
     return ee_frame_quat
 
 
@@ -300,7 +300,7 @@ def object_tilt (env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = Scen
     #print("obs term : tilt : ", tilt_deg)
     return tilt_deg
 
-def object_knocked(env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = SceneEntityCfg("object"), max_tilt: float = 90):
+def object_knocked(env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = SceneEntityCfg("object"), max_tilt: float = 45):
     object: RigidObject = env.scene[upper_object_cfg.name]
     tilt_deg = upright_tilt_deg(object.data.root_quat_w, object.data.default_root_state[:, 3:7])
     if tilt_deg.cpu().detach().numpy()[0] > max_tilt:
