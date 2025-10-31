@@ -117,7 +117,7 @@ class DifferentialIKController:
             ValueError: If the command type is ``pose_rel`` and either :attr:`ee_pos` or :attr:`ee_quat` is None.
         """
         # store command
-        print(f"[DEBUG] command : {command}")
+        #print(f"[DEBUG] command : {command}")
 
         self._command[:] = command
         # compute the desired end-effector pose
@@ -143,7 +143,7 @@ class DifferentialIKController:
                         "Neither end-effector position nor orientation can be None for `pose_rel` command type!"
                     )
                 self.ee_pos_des, self.ee_quat_des = apply_delta_pose(ee_pos, ee_quat, self._command)
-                print(f"Calculated pos and quat {self.ee_pos_des}, {self.ee_quat_des}")
+               # print(f"Calculated pos and quat {self.ee_pos_des}, {self.ee_quat_des}")
             else:
                 self.ee_pos_des = self._command[:, 0:3]
                 self.ee_quat_des = self._command[:, 3:7]
