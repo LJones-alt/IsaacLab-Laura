@@ -117,7 +117,7 @@ class DifferentialIKController:
             ValueError: If the command type is ``pose_rel`` and either :attr:`ee_pos` or :attr:`ee_quat` is None.
         """
         # store command
-        #print(f"[DEBUG] command : {command}")
+       # print(f"\n[DEBUG IK] command : {command}")
 
         self._command[:] = command
         # compute the desired end-effector pose

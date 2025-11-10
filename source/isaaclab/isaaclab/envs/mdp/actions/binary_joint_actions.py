@@ -126,6 +126,7 @@ class BinaryJointAction(ActionTerm):
     """
 
     def process_actions(self, actions: torch.Tensor):
+        #print(f"recieved gripper actions { actions}")
         # store the raw actions
         self._raw_actions[:] = actions
         # compute the binary mask

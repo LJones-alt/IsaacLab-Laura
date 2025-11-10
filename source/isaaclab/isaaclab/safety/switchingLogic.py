@@ -13,6 +13,7 @@ class SwitchingLogic:
         self.unsafe_windows = {joint_num : 0 for joint_num in self.joints}
         self.peak_limit = peak_limit
         self.window_confidence_level = 0.669
+        self.triggered = False 
 
     
     def _calc_windows(self)-> list[deque] :
@@ -22,7 +23,9 @@ class SwitchingLogic:
     def halfway_check(self, step:int=0, grasp_state:bool=True):
         #check that the subtask has been comepleted 
         if (step==(round(self.horizon/2))) and not grasp_state:
-            print(f'I got halfway and hadnt done subtask, lets try again')
+            if not self.triggered:
+                print(f'I got halfway and hadnt done subtask, lets try again')
+                self.triggered =True
             #then we are halfway through and lost, try again
             return True
         return False
@@ -40,7 +43,9 @@ class SwitchingLogic:
                # print(f'joint {joint_num}, window: {test_window}')
                # print(f"manually found peaks : {peaks}")
                 if peaks>=self.params[joint_num]['max_peaks']:
-                    print(f"Uncertaity in joint {joint_num} triggered")
+                    if not self.triggered:
+                        print(f"Uncertaity in joint {joint_num} triggered")
+                        self.triggered =True
                     return True
 
         

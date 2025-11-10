@@ -304,6 +304,6 @@ def object_knocked(env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = Sc
     object: RigidObject = env.scene[upper_object_cfg.name]
     tilt_deg = upright_tilt_deg(object.data.root_quat_w, object.data.default_root_state[:, 3:7])
     if tilt_deg.cpu().detach().numpy()[0] > max_tilt:
-        print("object knocked")
+     #   print("object knocked")
         return torch.tensor([True], device='cuda:0')
     else :return torch.tensor([False], device='cuda:0')

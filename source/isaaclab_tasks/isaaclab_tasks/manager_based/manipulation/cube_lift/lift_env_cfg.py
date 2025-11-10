@@ -22,6 +22,7 @@ from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, UsdF
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 import warp as wp
+import math
 from . import mdp
 #from isaaclab.utils.logging_helper import LoggingHelper, ErrorType, LogType
 
@@ -95,7 +96,7 @@ class CommandsCfg:
         debug_vis=True,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
           #  pos_x=(0.3,0.3), pos_y=(-0.28, -0.28), pos_z=(0.1, 0.1), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
-            pos_x=(0.4,0.4), pos_y=(-0.3, -0.3), pos_z=(0.08, 0.08), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
+            pos_x=(0.4,0.4), pos_y=(-0.3, -0.3), pos_z=(0.08, 0.08), roll=(math.pi/2, math.pi/2), pitch=(math.pi/2,math.pi/2), yaw=(0.0, 0.0)
         ),
     )
 

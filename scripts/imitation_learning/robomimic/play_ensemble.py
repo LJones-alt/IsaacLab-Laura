@@ -94,10 +94,9 @@ from isaaclab.safety.switchingLogic import SwitchingLogic
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from isaaclab.utils.math import subtract_frame_transforms, euler_xyz_from_quat
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
-
-#import chills.tasks
-#from chills.tasks.mdp import upright_tilt_deg
+from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg, BinaryJointPositionActionCfg
+from isaaclab.envs.mdp.actions.binary_joint_actions import BinaryJointPositionAction
+from backup_controller_handler import BackupController 
 
 def rollout(policy, env, success_term, horizon, device):
     """Perform a single rollout of the policy in the environment.
@@ -218,19 +217,7 @@ def has_fallen(asset, threshold: float = -0.7, debug: bool = True) -> bool:
 
     return uprightness > threshold
 
-# this took me too long to work out i needed lol
 
-def quaternion_to_euler(q_w, q_x, q_y, q_z):
-    # Roll (x-axis rotation)
-    roll = math.atan2(2 * (q_w * q_x + q_y * q_z), 1 - 2 * (q_x**2 + q_y**2))
-    
-    # Pitch (y-axis rotation)
-    pitch = math.asin(2 * (q_w * q_y - q_z * q_x))
-    
-    # Yaw (z-axis rotation)
-    yaw = math.atan2(2 * (q_w * q_z + q_x * q_y), 1 - 2 * (q_y**2 + q_z**2))
-    
-    return roll, pitch, yaw
 
 def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  use_recovery=True, rollout_num=0):
     """Perform a single rollout of the policy in the environment.
@@ -245,87 +232,55 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
         terminated: Whether the rollout terminated.
         traj: The trajectory of the rollout.
     """
+    ## do setup
     print("running rollout number : ", rollout_num)
     for policy in ensemble:
         policy.start_episode()
     obs_dict, _ = env.reset()
-    
-    #print(f"obs_dict type: {type(obs_dict)},\nobs_dict contents:\n {obs_dict}")
-
     traj = dict(actions=[], obs=[], next_obs=[], sub_obs=[], 
                 uncertainties=[], min_actions=[], max_actions=[],
                 time_taken=[], joint_pos=[], recovery=[], failure=[], grasp=[], appr=[])
    
     ###### SETUP SWITCHING LOGIC ####
     switchingLogic = SwitchingLogic(parameters, horizon=horizon)
-    
-    sim = env.unwrapped.sim
-    num_envs = env.num_envs
-
-
     certain_joint_positions = []
 
-    ### SET USE RECOVERY TO FALSE   ####
+    ###### SET UP RECOVERY   ####
     use_recovery=True
     recovery_activated_during_rollout = 0
-    # Set up recovery controller 
-    robot = env.unwrapped.scene["robot"]
-    print(f"Unwrapped sim : {sim}")
-    ee_recovery_pos = torch.tensor([[0.5206, 0.0096, 0.3751]], device=device)
-
-    ee_recovery_rot = torch.tensor([[ 0.6664,  0.0360,  0.7414, -0.0705]], device=device)
-    # lets change this into the 6 element tensor they are expecting 
-    roll,pitch,yaw = euler_xyz_from_quat(ee_recovery_rot)
-    ee_recovery_goal = torch.cat([ee_recovery_pos, ee_recovery_rot], dim =-1)
-    print(f"I got this roll {roll}, pitch {pitch}, yaw {yaw} and full tensor {torch.cat([roll, pitch, yaw], dim=-1)}\n i need to add with {ee_recovery_pos}")
-    ee_rpy = torch.cat([roll, pitch, yaw], dim=-1)
-    ee_rpy = ee_rpy.unsqueeze(0)
-    ee_goal = torch.cat([ee_recovery_pos, ee_rpy], dim=1)
-    # Create controller
-    diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
-    diff_ik_controller = DifferentialIKController(diff_ik_cfg, num_envs=env.unwrapped.scene.num_envs, device=sim.device)
-    
-    # diff_ik_action_controller = DifferentialInverseKinematicsActionCfg(
-    #         asset_name="robot",
-    #         joint_names=["panda_joint.*"],
-    #         body_name="panda_hand",
-    #         controller=diff_ik_controller,
-    #         scale=0.5,
-    #         body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
-    #     )
-    robot_entity_cfg = SceneEntityCfg("robot", joint_names=["panda_joint.*"], body_names=["panda_hand"])
-    robot_entity_cfg.resolve(env.unwrapped.scene)
-    if robot.is_fixed_base:
-        ee_jacobi_idx = robot_entity_cfg.body_ids[0] - 1
-    else:
-        ee_jacobi_idx = robot_entity_cfg.body_ids[0]
-    
-#########SET TO FALSE #######
-    recovery_mode = True
     print("rollout recovery enabled ? : ", use_recovery)
     
+    ##### RECOVERY CONFIG  ####
     recovery_cooldown_duration = 300 # timesteps
     recovery_cooldown_timer = recovery_cooldown_duration
     recovery_cooldown_active = False
     recovery = []
     recovery_steps = 0
+
+    ##### CONFIG RECOVERY CONTROLLER ####
+    backup_controller  = BackupController(env, device)
+    state_guess = 0
+    last_state =0
+    recovery_mode= False
+    state_guessed = False
+    recovery_triggered = False
+    object_knocked = False
+
     print(f'Running for horizon {horizon}')
     for i in range(horizon):
         # Prepare observations
       
         obs = copy.deepcopy(obs_dict["policy"])
         sub_obs = copy.deepcopy(obs_dict["subtask_terms"])
-        object = env.unwrapped.scene["object"]
-            
-       # is_tipped = has_fallen(object, -0.95, True)
+       
         for ob in obs:
             obs[ob] = torch.squeeze(obs[ob])
-            #print(f"found observation : {obs[ob]}")
-        
+            
         for subob in sub_obs:
             sub_obs[subob] = torch.squeeze(sub_obs[subob])
-        if obs['object_knocked']:
-            print("object knocked over")
+        traj["obs"].append(obs)
+        traj["sub_obs"].append(sub_obs)
+        
         # Check if environment image observations
         if hasattr(env.cfg, "image_obs_list"):
             # Process image observations for robomimic inference
@@ -338,156 +293,59 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
                     image = image.clip(0.0, 1.0)
                     obs[image_name] = image
 
-        traj["obs"].append(obs)
-        traj["sub_obs"].append(sub_obs)
-        
-        object=env.unwrapped.scene['object']
-        #tilt_deg = upright_tilt_deg(object.data.root_quat_w, object.data.default_root_state[:, 3:7])
-        #print("Tilt deg  : ", tilt_deg.item())
-        if recovery_mode and not recovery_cooldown_active:
-            print(f"[Recovery] Mode  Timestep {i}")
-          
-            jacobian = robot.root_physx_view.get_jacobians()[:, ee_jacobi_idx, :, robot_entity_cfg.joint_ids]
-            ee_pose_w = robot.data.body_pose_w[:, robot_entity_cfg.body_ids[0]]
-            root_pose_w = robot.data.root_pose_w
-            joint_pos = robot.data.joint_pos[:, robot_entity_cfg.joint_ids]
-
-            # current EE pose in base frame
-            ee_pos_b, ee_quat_b = subtract_frame_transforms(
-                root_pose_w[:, 0:3], root_pose_w[:, 3:7],
-                ee_pose_w[:, 0:3], ee_pose_w[:, 3:7]
-            )
-            print(f"ee_pos_b {ee_pos_b}, ee_quat_b : {ee_quat_b}")
-
-            # target EE pose (absolute, world frame → base frame)
-            target_pos_w = ee_recovery_pos     # [1,3]
-            target_quat_w = ee_recovery_rot    # [1,4]
-            target_pos_b, target_quat_b = subtract_frame_transforms(
-                root_pose_w[:, 0:3], root_pose_w[:, 3:7],
-                target_pos_w, target_quat_w
-            )
-            print(f"target_pos_b {target_pos_b}, target_quat_b {target_quat_b}")
-
-            # --- compute relative pose command (6D) ---
-            # translation delta
-            delta_pos = target_pos_b - ee_pos_b    # [1,3]
-            print(f"Delta pos {delta_pos}")
-            # rotation delta (ΔR = R_target * R_currentᵀ)
-            delta_rot = target_quat_b - ee_quat_b
-            print(f"Delat Rot {delta_rot}")
-            # convert ΔR to euler angles (XYZ convention)
-            r,p,y = euler_xyz_from_quat(delta_rot, wrap_to_2pi=False)
-            print(f"[DEBUG] Delat R {r}, P {p}, Y {y}")
-            delta_rpy = torch.cat([r,p,y], dim=-1)
-            delta_rpy = torch.unsqueeze(delta_rpy,0)
-            print(f"[DEBUG] RPY {delta_rpy}")
-            # --- build relative command ---
-            ee_goal = torch.cat([delta_pos, delta_rpy], dim=-1)  # [1,6]
-
-           
-            # debug info
-            print(f"[DEBUG] ee_goal (Δx,Δy,Δz,Δr,Δp,Δy): {ee_goal}")
-            print(f"[DEBUG] Current pos_b: {ee_pos_b}")
-            print(f"[DEBUG] Target pos_b: {target_pos_b}")
-
-            # --- send command to controller ---
-            diff_ik_controller.set_command(ee_goal, ee_pos_b, ee_quat_b)
-
-            # compute joint targets
-            joint_pos_des = diff_ik_controller.compute(ee_pos_b, ee_quat_b, jacobian, joint_pos)
-
-            # (optional) denormalize actions if necessary
-            if args_cli.norm_factor_min is not None and args_cli.norm_factor_max is not None:
-                actions = ((actions + 1) * (args_cli.norm_factor_max - args_cli.norm_factor_min)) / 2 + args_cli.norm_factor_min
-
-            # --- execute recovery movement ---
-            pos_err = torch.norm(target_pos_b - ee_pos_b)
-            actions=joint_pos_des
-            metrics = ensemble_uncertainty(ensemble, obs)
-            metrics['min']=actions
-            metrics['max']=actions
-            uncertainty = 0
-
-            if pos_err > 1e-3:
-                robot.set_joint_position_target(joint_pos_des, joint_ids=robot_entity_cfg.joint_ids)
-                env.scene.write_data_to_sim()
-                obs_dict, _, terminated, truncated, _ = env.step(joint_pos_des)
-            else:
-                print(f"[Recovery] Target reached — ending recovery mode.")
-                recovery_mode = False
-                recovery_cooldown_active = True
-                print("[Recovery] Cooldown Activated.")
-
-                
-        else:
-            env.unwrapped.actions.arm_action = DifferentialInverseKinematicsActionCfg(
-                asset_name="robot",
-                joint_names=["panda_joint.*"],
-                body_name="panda_hand",
-                controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),
-                scale=0.5,
-                body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
-            )
-            recovery_steps=0
-            # Calculate uncertainty using the ensemble
-            recovery.append(False)
-            
-            ## detect if we have tipped the object 
-
-            metrics = ensemble_uncertainty(ensemble, obs)
-            # Get the std and mean action
-            uncertainty = metrics['variance']
-            actions = metrics['mean']
-
-
-            # uncert went here
-            
-
-            if switchingLogic.check(uncertainty, i) and not recovery_cooldown_active:
-                if use_recovery :
-                    recovery_mode = True
-                recovery_activated_during_rollout+=1
-           
-            #check halfway thorough, if we havent managed grasp, lets reset and try again
-            if switchingLogic.halfway_check(i,sub_obs['grasp'].item()):
-                if use_recovery and not recovery_cooldown_active:
-                    recovery_mode = True
-
-
-            if recovery_cooldown_active:
-                if object_grasped(env):
-                    # normal recovery if already holding
-                    recovery_cooldown_timer-=1
-                else:
-                    # shorten the cooldown for grasping stage 
+        #### get policy action   ####
+        metrics = ensemble_uncertainty(ensemble, obs)
+        uncertainty = metrics['variance']
+        policy_actions = metrics['mean']
+        # fix state guess
+        if sub_obs['grasp']:
+                if state_guess <4 :
+                    state_guess = 4
                     
-                    recovery_cooldown_timer -= 1
+        sm_actions , state_guess = backup_controller.get_controller_action(state_guess, 0)
+        if last_state != state_guess:
+            #print(f"State {state_guess.item()}")
+            last_state = state_guess
             
+
+
+        # this is the switching logic
+        if switchingLogic.check(uncertainty, i):
+                # uncertainty triggered
+                if use_recovery and not recovery_cooldown_active:
+                    # if we have switched to recovery
+                    recovery_mode = True
+                    recovery_activated_during_rollout+=1
+                    if not recovery_triggered  :
+                        print(f"[RECOVERY] Step {i}")
+                        recovery_triggered = True
+            
+        if recovery_mode:
+            # if holding the object, start with lifting 
+            actions = sm_actions
+      
+        else:
+            actions = policy_actions
             if recovery_cooldown_timer <= 0:
                 recovery_cooldown_active = False
                 recovery_cooldown_timer = recovery_cooldown_duration 
                 print("Recovery Cooldown Ended")
-            
-            if not recovery_mode:
-                current_absolute_joints = get_joint_pos(env)
-                certain_joint_positions.append(current_absolute_joints)
 
-                
             # Unnormalize actions
             if args_cli.norm_factor_min is not None and args_cli.norm_factor_max is not None:
                 actions = (
                     (actions + 1) * (args_cli.norm_factor_max - args_cli.norm_factor_min)
                 ) / 2 + args_cli.norm_factor_min
-           # print(f"before shaping action : {actions}")
             actions = actions.to(device=device).view(1, env.action_space.shape[1])
-            # print(f"------------------------------")
-           # print(f"Policy action {actions.shape} :  {actions}")
-            
-            # Apply actions
-            obs_dict, _, terminated, truncated, _ = env.step(actions)
+        
+        
+        # Apply actions
+        obs_dict, _, terminated, truncated, _ = env.step(actions)
+        recovery.append(recovery_mode)
+        # update obs from taking action
         obs = obs_dict["policy"]
         sub_obs = obs_dict["subtask_terms"]
-        # print(f"Obs change : {obs}")
+        
         # Record trajectory
         traj["actions"].append(actions.tolist())
         traj["next_obs"].append(obs)
@@ -497,6 +355,9 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
         traj['time_taken'].append(metrics['time_taken'])
         traj['joint_pos'].append(obs['abs_joint_pos'])
         traj['recovery'].append(recovery)
+        if torch.any(obs['object_knocked']):
+            print("[MONITOR] object knocked over")
+            object_knocked = True
 
         # Check if rollout was successful
         if bool(success_term.func(env, **success_term.params)[0]):
@@ -507,30 +368,30 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
             traj['appr'].append(appr.item())
             print(f"grasp : {traj['grasp']}, appr : {traj['appr']}")
             # print(f"grasp : {grasp.item()}, appr : {appr.item()}")
-            return True, traj, recovery_activated_during_rollout
+            return True, traj, recovery_activated_during_rollout, ""
         
         elif terminated or truncated:
-            
             grasp = torch.any(sub_obs['grasp'])
             traj['grasp'].append(grasp.item())
             appr = torch.any(sub_obs['appr_goal'])
             traj['appr'].append(appr.item())
             #print(f"grasp : {traj['grasp']}, appr : {traj['appr']}")
-            if obs['object_knocked']:
-                
+            if i==horizon:
                 #if the failure was caused by object collision
-                traj['failure'].append("knocked")
+                traj['failure'].append("timeout")
+                failure_reason = "timeout"
             else:
                 #if failure due to timeout, record timeout
-                traj['failure'].append("timeout")
-            return False, traj, recovery_activated_during_rollout
+                traj['failure'].append("knocked")
+                failure_reason = "object_knocked"
+            return False, traj, recovery_activated_during_rollout, failure_reason
     #print("REcovery : ", traj["recovery"])
     traj['failure'].append("timeout")
     grasp = torch.any(sub_obs['grasp'])
     traj['grasp'].append(grasp.item())
     appr = torch.any(sub_obs['appr_goal'])
     traj['appr'].append(appr.item())
-    return False, traj, recovery_activated_during_rollout
+    return False, traj, recovery_activated_during_rollout, ""
 
 
 
@@ -754,40 +615,41 @@ def main():
     parameters = {
         'beaker_lift' :{
             0 : {
-                "confidence_level": 0.017165569182596162,
-                "window_size": 5,
-                "max_peaks": 5
+                "confidence_level": 0.010360572377319478,
+                "window_size": 9,
+                "max_peaks": 9
             },
             1 : {
-                "confidence_level": 0.024839555704716736,
-                "window_size": 12,
-                "max_peaks": 4
+                "confidence_level": 0.012117819935441015,
+                "window_size": 9,
+                "max_peaks": 9
             },
             2 : {
-                "confidence_level": 0.022856649849482057,
-                "window_size": 12,
-                "max_peaks": 5
+                "confidence_level": 0.0114854090040122,
+                "window_size": 9,
+                "max_peaks": 9
             },
             3 : {
-                "confidence_level": 0.03564607457876469,
+                "confidence_level": 0.01721086513038985,
                 "window_size": 9,
-                "max_peaks": 5
+                "max_peaks": 9
             },
             4 : {
-                "confidence_level": 0.03087440802734071,
-                "window_size": 10,
-                "max_peaks": 3
+                "confidence_level": 0.01516669949421836,
+                "window_size": 9,
+                "max_peaks": 9
             },
             5 : {
-                "confidence_level": 0.02323877457883784,
-                "window_size": 5,
-                "max_peaks": 4
+                "confidence_level": 0.011445348395548671,
+                "window_size": 9,
+                "max_peaks": 9
             },
             6 : {
-                "confidence_level": 0.8432899916370529,
-                "window_size": 13,
-                "max_peaks": 4
+                "confidence_level": 0.0001330413469565007,
+                "window_size": 15,
+                "max_peaks": 9
             },
+
         },
     }
 
@@ -831,7 +693,7 @@ def main():
     for trial in range(args_cli.num_rollouts):
         print(f"[INFO] Starting trial {trial}")
 
-        terminated, traj, recovery_activated_during_rollout = rollout_ensemble(pick_place_ensemble[:args_cli.ensemble_size], env, success_term, args_cli.horizon, device, parameters['beaker_lift'], use_recovery=args_cli.use_recovery, rollout_num=trial)
+        terminated, traj, recovery_activated_during_rollout, failure = rollout_ensemble(pick_place_ensemble[:args_cli.ensemble_size], env, success_term, args_cli.horizon, device, parameters['beaker_lift'], use_recovery=args_cli.use_recovery, rollout_num=trial)
         # save the uncertainties
         print("Finished rollout, recovery needed : ", recovery_activated_during_rollout)
         #print("actions shape : ", traj['actions'])
