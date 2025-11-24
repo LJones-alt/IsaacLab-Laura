@@ -40,6 +40,9 @@ class BackupController:
         # lets change this into the 6 element tensor they are expecting 
         roll,pitch,yaw = euler_xyz_from_quat(ee_recovery_rot)
         rest_pos = torch.cat([rest_pos, ee_recovery_rot], dim =-1)
+        print(f"Rest pos {rest_pos}")
+        print(f"rpy : {roll}, {pitch}, {yaw}")
+        #print(f"rpy version :{torch.cat([rest_pos,roll.unsqueeze(0), pitch.unsqueeze(0), yaw.unsqueeze(0)], dim =-1)}")
         return rest_pos
     
     def _setup_robot(self):
