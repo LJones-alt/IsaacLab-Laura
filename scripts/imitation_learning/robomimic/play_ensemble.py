@@ -261,7 +261,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
     backup_controller  = BackupController(env, device)
     state_guess = 0
     last_state =0
-    recovery_mode= False
+    recovery_mode= True
     state_guessed = False
     recovery_triggered = False
     object_knocked = False

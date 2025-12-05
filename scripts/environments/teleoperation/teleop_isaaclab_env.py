@@ -21,7 +21,7 @@ parser.add_argument(
     default="keyboard",
     help="Device for interacting with environment. Examples: keyboard, spacemouse, gamepad, handtracking, manusvive",
 )
-parser.add_argument("--task", type=str, default="Dev-IK-Rel-Place-v0", help="Name of the task.")
+parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--sensitivity", type=float, default=1.0, help="Sensitivity factor.")
 parser.add_argument(
     "--enable_pinocchio",

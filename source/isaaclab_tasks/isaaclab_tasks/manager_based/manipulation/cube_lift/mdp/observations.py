@@ -161,14 +161,14 @@ def is_object_lifted(
 def ee_frame_pos(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")) -> torch.Tensor:
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     ee_frame_pos = ee_frame.data.target_pos_w[:, 0, :] - env.scene.env_origins[:, 0:3]
-    #print(f"EE pos : {ee_frame_pos}")
+    print(f"EE pos : {ee_frame_pos}")
     return ee_frame_pos
 
 
 def ee_frame_quat(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")) -> torch.Tensor:
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     ee_frame_quat = ee_frame.data.target_quat_w[:, 0, :]
-    #print(f"EE pos : {ee_frame_quat}")
+    print(f"EE quat : {ee_frame_quat}")
     return ee_frame_quat
 
 

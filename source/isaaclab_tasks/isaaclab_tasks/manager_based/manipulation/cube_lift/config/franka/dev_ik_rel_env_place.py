@@ -8,6 +8,9 @@ from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsA
 from isaaclab.utils import configclass
 from isaaclab.assets import RigidObjectCfg, ArticulationCfg
 from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.assets import AssetBaseCfg
+from isaaclab.sim.spawners.from_files import UsdFileCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from . import dev_env_cfg
 import math
 from isaaclab.managers import SceneEntityCfg
@@ -29,7 +32,7 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         glassware = ChemistryGlassware()
         self.scene.stirplate = glassware.stirplate(pos=[0.5, 0.0, 0.01])
         self.scene.scale = glassware.scale(pos=[0.3, -0.3, 0.01])
-
+        
         self.events.reset_object_position = EventTerm(
             func=mdp.reset_multiple_root_state_uniform,
             mode="reset",
@@ -42,20 +45,20 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         )
         self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
-            init_state=ArticulationCfg.InitialStateCfg(
-                joint_pos={
+            # init_state=ArticulationCfg.InitialStateCfg(
+            #     joint_pos={
                     
-                    "panda_joint1":  0.3281,
-                    "panda_joint2": -0.3684,   
-                    "panda_joint3":  -0.2787,
-                    "panda_joint4": -2.6138,  
-                    "panda_joint5":  -2.7527,
-                    "panda_joint6":  2.4991,  #  +90° → keeps hand level
-                    "panda_joint7":  0.3331,
-                    "panda_finger_joint1": 0.04,   # open gripper
-                    "panda_finger_joint2": 0.04,
-                }
-            ),
+            #         "panda_joint1":  0.3281,
+            #         "panda_joint2": -0.3684,   
+            #         "panda_joint3":  -0.2787,
+            #         "panda_joint4": -2.6138,  
+            #         "panda_joint5":  -2.7527,
+            #         "panda_joint6":  2.4991,  #  +90° → keeps hand level
+            #         "panda_joint7":  0.3331,
+            #         "panda_finger_joint1": 0.04,   # open gripper
+            #         "panda_finger_joint2": 0.04,
+            #     }
+            # ),
         )
         # replace with relative position controller 
         self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
