@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from isaaclab.assets import RigidObject, Articulation
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.utils.math import combine_frame_transforms, matrix_from_quat
 
 from isaaclab.sensors import FrameTransformer
 from isaaclab.utils.math import combine_frame_transforms, subtract_frame_transforms
@@ -95,3 +96,51 @@ def placed(
     gripper_open = robot.data.joint_pos[:, -1] >  gripper_open_val
     state = torch.logical_and(object_position, gripper_open)
     return state
+
+def object_stacked_upright(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    upper_object_cfg: SceneEntityCfg = SceneEntityCfg("object"),lower_object_cfg: SceneEntityCfg = SceneEntityCfg("goal"),
+    xy_threshold: float = 0.1, height_threshold: float = 0.1, height_diff: float = 0.05,
+    upright_good_deg: float = 30.0, gripper_open_val: torch.Tensor = torch.tensor([0.04]), logging=False) -> torch.Tensor:
+    """Stacked AND sufficiently upright (≤ upright_good_deg)."""
+
+    upper: RigidObject = env.scene[upper_object_cfg.name]
+    tilt_deg = upright_tilt_deg(upper.data.root_quat_w, upper.data.default_root_state[:, 3:7])
+    upright_good = tilt_deg <= upright_good_deg
+    stacked = object_stacked(env, robot_cfg, upper_object_cfg, lower_object_cfg,
+        xy_threshold, height_threshold, height_diff, gripper_open_val)
+    stacked_upright = stacked & upright_good
+
+    #if logging:
+        #rising = log(env, "object_stacked_upright", stacked_upright, f"Stacked (upright ≤ {upright_good_deg}°)")
+       # idx = torch.nonzero(rising, as_tuple=False).squeeze(-1)
+        #if idx.numel() > 0:
+        #    print(f"[stacked-upright tilt] n={int(idx.numel())} sample={tilt_deg[idx][:5].tolist()}")
+
+    return stacked_upright
+
+
+def upright_tilt_deg(q_cur, q_init) -> torch.Tensor:
+    u_cur, u_init = matrix_from_quat(q_cur)[:, :, 2], matrix_from_quat(q_init)[:, :, 2]
+    return torch.rad2deg(torch.acos((u_cur * u_init).sum(-1).clamp(-1.0, 1.0)))
+
+
+def object_stacked(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    upper_object_cfg: SceneEntityCfg = SceneEntityCfg("object"), 
+    lower_object_cfg: SceneEntityCfg = SceneEntityCfg("goal"),
+    xy_threshold: float = 0.1, height_threshold: float = 0.1, height_diff: float = 0.05,
+    gripper_open_val: torch.Tensor = torch.tensor([0.04]),logging=False) -> torch.Tensor:
+    """Check if an object is stacked by the specified robot."""
+
+    robot: Articulation = env.scene[robot_cfg.name]
+    upper_object: RigidObject = env.scene[upper_object_cfg.name]
+    lower_object: RigidObject = env.scene[lower_object_cfg.name]
+    pos_diff = upper_object.data.root_pos_w - lower_object.data.root_pos_w
+    height_dist = torch.linalg.vector_norm(pos_diff[:, 2:], dim=1)
+    xy_dist = torch.linalg.vector_norm(pos_diff[:, :2], dim=1)
+    stacked = torch.logical_and(xy_dist < xy_threshold, (height_dist - height_diff) < height_threshold)
+    # stacked = torch.logical_and(torch.isclose(robot.data.joint_pos[:, -1], 
+    #     gripper_open_val.to(env.device), atol=1e-4, rtol=1e-4), stacked)
+    # stacked = torch.logical_and(torch.isclose(robot.data.joint_pos[:, -2], 
+    #     gripper_open_val.to(env.device), atol=1e-4, rtol=1e-4), stacked)
+    print(f"For DEBUG : STACKED STATUS : {stacked}")
+    return stacked

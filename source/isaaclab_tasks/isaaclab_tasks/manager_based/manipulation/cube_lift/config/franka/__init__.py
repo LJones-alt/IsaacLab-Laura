@@ -121,6 +121,7 @@ gym.register(
         "robomimic_bc_trans_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_trans.json"),
         "robomimic_hbc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/hbc.json"),
         "robomimic_bcq_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bcq.json"),
+        "robomimic_diffusion_policy_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/diffusion_policy.json"),
         #"robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc.json"),
     },
     disable_env_checker=True,
@@ -135,6 +136,7 @@ gym.register(
         "robomimic_bc_trans_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_trans.json"),
         "robomimic_hbc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/hbc.json"),
         "robomimic_bcq_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bcq.json"),
+        "robomimic_diffusion_policy_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/diffusion_policy.json"),
        
     },
     disable_env_checker=True,
@@ -150,6 +152,7 @@ gym.register(
         "robomimic_bc_trans_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_trans.json"),
         "robomimic_hbc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/hbc.json"),
         "robomimic_bcq_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bcq.json"),
+        "robomimic_diffusion_policy_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/diffusion_policy.json"),
        
     },
     disable_env_checker=True,

@@ -140,7 +140,7 @@ def normalize_hdf5_actions(config: Config, log_dir: str) -> str:
 
 #
 
-def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str], video_dirs: list[str], use_config_seed: bool = True, ensemble_size: int = 1):
+def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str], video_dirs: list[str], use_config_seed: bool = True, ensemble_size: int = 1, use_bootstrap: bool = False):
     """Train an ensemble of models using the algorithm specified in config. If ensemble_size is not specified, a single model will be trained.
 
     Args:
@@ -149,6 +149,9 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
         log_dirs: List of directories to save logs for each network in the ensemble.
         ckpt_dirs: List of directories to save checkpoints for each network in the ensemble.
         video_dirs: List of directories to save videos for each network in the ensemble.
+        use_config_seed: Whether to use config seed.
+        ensemble_size: Number of models in the ensemble.
+        use_bootstrap: If True, each model trains on a bootstrap sample (with replacement).
     """
     # first set seeds
     if use_config_seed:
@@ -262,6 +265,32 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
     #config.algo.transformer.num_layers = 1
     #config.algo.transformer.num_heads = 1
     for model_num in range(ensemble_size):
+        # Set different seed for each model to ensure diversity
+        model_seed = config.train.seed + model_num
+        np.random.seed(model_seed)
+        torch.manual_seed(model_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(model_seed)
+        print(f"\n============= Training Model {model_num} with Seed {model_seed} =============")
+        
+        # Create bootstrap sample if enabled (each model sees different data)
+        if use_bootstrap:
+            print(f"Creating bootstrap sample for model {model_num}...")
+            bootstrap_trainset = create_bootstrap_sample(trainset, seed=model_seed)
+            if isinstance(bootstrap_trainset, Subset):
+                bootstrap_sampler = bootstrap_trainset.dataset.get_dataset_sampler() if hasattr(bootstrap_trainset.dataset, 'get_dataset_sampler') else None
+            else:
+                bootstrap_sampler = bootstrap_trainset.get_dataset_sampler() if hasattr(bootstrap_trainset, 'get_dataset_sampler') else None
+            
+            train_loader = DataLoader(
+                dataset=bootstrap_trainset,
+                sampler=bootstrap_sampler,
+                batch_size=config.train.batch_size,
+                shuffle=(bootstrap_sampler is None),
+                num_workers=config.train.num_data_workers,
+                drop_last=True,
+            )
+        
         # setup a wand run
         wand_experiment_name = f"{config.experiment.name}-model_{model_num}"
         run=wandb.init(
@@ -375,7 +404,7 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
         run.finish()
         #config.algo.transformer.num_layers = config.algo.transformer.num_layers + 1
         #config.algo.transformer.num_heads = config.algo.transformer.num_heads + 1
-       # run.finish()
+        #run.finish()
     # terminate logging
     data_logger.close()
 
@@ -396,6 +425,34 @@ def keep_data_percentage(trainset, percentage):
     print(f"Retained: {retained_percent:.2f}% of original dataset")
 
     return trainset
+
+
+def create_bootstrap_sample(trainset, seed: int):
+    """Create a bootstrap sample (sampling with replacement) from the training set.
+    
+    Each bootstrap sample contains N samples drawn with replacement from the original
+    dataset of size N. On average, ~63.2% of samples will be unique, with ~36.8% duplicates.
+    This creates diversity across ensemble members.
+    
+    Args:
+        trainset: The original training dataset.
+        seed: Random seed for reproducibility.
+        
+    Returns:
+        A Subset of the training data with bootstrap sampling.
+    """
+    np.random.seed(seed)
+    total_size = len(trainset)
+    # Sample WITH replacement - same sample can appear multiple times
+    indices = np.random.choice(total_size, size=total_size, replace=True)
+    
+    # Count unique samples
+    unique_count = len(np.unique(indices))
+    unique_percent = (unique_count / total_size) * 100
+    
+    print(f"Bootstrap sample created: {unique_count}/{total_size} unique samples ({unique_percent:.1f}%)")
+    
+    return Subset(trainset, indices)
 
 
 
@@ -455,6 +512,7 @@ def main(args: argparse.Namespace):
     log_dirs, ckpt_dirs, video_dirs = [], [], []
     
     for i in range(args.ensemble_size):
+        
         new_output_dir = f"{original_output_dir}/model{i}/"
         config.train.output_dir = new_output_dir
         log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config)
@@ -485,7 +543,8 @@ def main(args: argparse.Namespace):
             device=device, 
             log_dirs=log_dirs, ckpt_dirs=ckpt_dirs, video_dirs=video_dirs, 
             use_config_seed=True, 
-            ensemble_size=args.ensemble_size
+            ensemble_size=args.ensemble_size,
+            use_bootstrap=args.use_bootstrap
         )
         
     except Exception as e:
@@ -520,6 +579,8 @@ if __name__ == "__main__":
     
     parser.add_argument("--dataset_percentage", type=float, default=1.0, help="Percentage of samples from the dataset to use")
     parser.add_argument("--ensemble_size", type=int, default=15, help="Defines the number of networks in the ensemble.")
+    parser.add_argument("--use_bootstrap", action="store_true", default=False, 
+                        help="Use bootstrap sampling (with replacement) for each ensemble member. Creates more diversity.")
     
     args = parser.parse_args()
 

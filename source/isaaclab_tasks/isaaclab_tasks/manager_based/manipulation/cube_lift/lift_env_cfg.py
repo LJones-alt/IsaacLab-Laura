@@ -136,7 +136,8 @@ class ObservationsCfg():
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
         object_position = ObsTerm(func=mdp.object_position_in_robot_root_frame)
-        target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})
+        #target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})
+        target_object_position = ObsTerm(func=mdp.target_position, params={"object_cfg": SceneEntityCfg("scale")})
         actions = ObsTerm(func=mdp.last_action)
        # object_to_target = ObsTerm(func=mdp.object_near_goal)
         eef_pos = ObsTerm(func=mdp.ee_frame_pos)
@@ -242,7 +243,7 @@ class EventCfg:
         #     "asset_cfg": SceneEntityCfg("object", body_names="Object"),
         # },
         params={
-            "scale_range": {"x": (0.5, 0.5), "y": (0.5, 0.5), "z": (0.6, 0.7)},
+            "scale_range": {"x": (0.5, 0.5), "y": (0.5, 0.5), "z": (0.6, 0.6)},
             "asset_cfg": SceneEntityCfg("object", body_names="Object"),
         },
     #     params={
@@ -353,7 +354,7 @@ class CubeEnvCfg(ManagerBasedRLEnvCfg):
         # general settings
         
         self.decimation = 2
-        self.episode_length_s = 60
+        self.episode_length_s = 500
         # simulation settings
         self.sim.dt = 0.01  # 100Hz
         self.sim.render_interval = self.decimation

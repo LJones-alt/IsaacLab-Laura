@@ -30,18 +30,19 @@ class SwitchingLogic:
             return True
         return False
 
-
+s
     def check(self, uncertainties, step) -> bool:
         # 1. Update windows
         for joint_num, unc in enumerate(uncertainties):
             # Check for bounds if uncertainties is smaller than self.joints 
             self.traj[joint_num][step]=unc.item()
+            #print(f'Action comp {joint_num} uncertainty at step {step}: {unc.item()}')
             if step > self.params[joint_num]['window_size']:
                 
                 test_window = self.traj[joint_num][step-self.params[joint_num]['window_size']:step]
                 peaks = sum(1 for x in test_window if x>= self.params[joint_num]['confidence_level'])
-               # print(f'joint {joint_num}, window: {test_window}')
-               # print(f"manually found peaks : {peaks}")
+                #print(f'action {joint_num}, window: {test_window}')
+               # print(f"Action comp {joint_num}, {unc.item()} limit {self.params[joint_num]['confidence_level']} manually found peaks : {peaks}")
                 if peaks>=self.params[joint_num]['max_peaks']:
                     if not self.triggered:
                         print(f"Uncertaity in joint {joint_num} triggered")

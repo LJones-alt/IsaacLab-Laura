@@ -7,7 +7,7 @@
             "terminal_output_to_txt": true,
             "log_tb": true,
             "log_wandb": true,
-            "wandb_proj_name": "Lift_beaker_new_demos_med_qual"
+            "wandb_proj_name": "pick_place_new_demos_med_qual"
         },
         "save": {
             "enabled": true,
@@ -36,14 +36,14 @@
     },
     "train": {
         "data": null,
-        "output_dir": "docs/training_runs/bc_rnn",
+        "output_dir": "/workspace/isaaclab/docs/training_runs/bc_rnn",
         "num_data_workers": 4,
         "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": "valid",
-        "seq_length": 10,
+        "seq_length": 100,
         "dataset_keys": [
             "actions",
             "rewards",
@@ -53,7 +53,7 @@
         "goal_mode": null,
         "cuda": true,
         "batch_size": 100,
-        "num_epochs": 2000,
+        "num_epochs": 1500,
         "seed": 101
     },
     "algo": {
@@ -87,7 +87,7 @@
         
         "rnn": {
             "enabled": true,
-            "horizon": 10,
+            "horizon": 100,
             "hidden_dim": 400,
             "rnn_type": "LSTM",
             "num_layers": 2,

@@ -256,14 +256,13 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
     recovery_cooldown_active = False
     recovery = []
     recovery_steps = 0
+    max_recovery_steps = 500  # Safety limit for recovery mode
 
     ##### CONFIG RECOVERY CONTROLLER ####
     backup_controller  = BackupController(env, device)
     state_guess = 0
-    last_state =0
-    recovery_mode= True
-    state_guessed = False
-    recovery_triggered = False
+    last_state = 0
+    recovery_mode = False
     object_knocked = False
 
     print(f'Running for horizon {horizon}')
@@ -297,39 +296,62 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
         metrics = ensemble_uncertainty(ensemble, obs)
         uncertainty = metrics['variance']
         policy_actions = metrics['mean']
-        # fix state guess
-        if sub_obs['grasp']:
-                if state_guess <4 :
-                    state_guess = 4
+        
+        # Robust state estimation based on actual observations
+        is_grasping = bool(sub_obs['grasp'].item()) if sub_obs['grasp'].numel() == 1 else bool(torch.any(sub_obs['grasp']))
+        
+        # Update state guess based on actual gripper/object state
+        if is_grasping:
+            # Object is grasped - should be in LIFT or later states
+            if state_guess < 4:  # LIFT_OBJECT = 4
+                state_guess = 4
+                print(f"[STATE] Updated to LIFT_OBJECT (grasp detected)")
+        else:
+            # Not grasping - if we thought we were lifting, we dropped it
+            if state_guess >= 4 and state_guess < 7:  # Was in lift/move states
+                # Object dropped - need to re-approach
+                state_guess = 0  # Go back to REST to safely re-approach
+                print(f"[STATE] Reset to REST (grasp lost)")
                     
-        sm_actions , state_guess = backup_controller.get_controller_action(state_guess, 0)
+        sm_actions, state_guess = backup_controller.get_controller_action(state_guess, 0)
         if last_state != state_guess:
-            #print(f"State {state_guess.item()}")
+            print(f"[STATE] Transition: {last_state} -> {state_guess}")
             last_state = state_guess
-            
 
 
         # this is the switching logic
-        if switchingLogic.check(uncertainty, i):
+        uncertainty_triggered = switchingLogic.check(uncertainty, i)
+        if uncertainty_triggered:
                 # uncertainty triggered
                 if use_recovery and not recovery_cooldown_active:
                     # if we have switched to recovery
-                    recovery_mode = True
-                    recovery_activated_during_rollout+=1
-                    if not recovery_triggered  :
-                        print(f"[RECOVERY] Step {i}")
-                        recovery_triggered = True
+                    if not recovery_mode:
+                        recovery_mode = True
+                        recovery_activated_during_rollout+=1
+                        recovery_steps = 0
+                        print(f"[RECOVERY] Step {i} - Starting recovery from state {state_guess}")
             
         if recovery_mode:
-            # if holding the object, start with lifting 
             actions = sm_actions
-      
+            recovery_steps += 1
+            
+            # Exit recovery when task completes or after max steps
+            max_recovery_steps = 500
+            if state_guess == 7 or recovery_steps > max_recovery_steps:  # APPROACH_GOAL = 7
+                print(f"[RECOVERY] Completed after {recovery_steps} steps, state={state_guess}")
+                recovery_mode = False
+                recovery_cooldown_active = True
+                recovery_cooldown_timer = recovery_cooldown_duration
         else:
+            # Decrement cooldown when not in recovery
+            if recovery_cooldown_active:
+                recovery_cooldown_timer -= 1
+                if recovery_cooldown_timer <= 0:
+                    recovery_cooldown_active = False
+                    recovery_cooldown_timer = recovery_cooldown_duration 
+                    print("Recovery Cooldown Ended")
+
             actions = policy_actions
-            if recovery_cooldown_timer <= 0:
-                recovery_cooldown_active = False
-                recovery_cooldown_timer = recovery_cooldown_duration 
-                print("Recovery Cooldown Ended")
 
             # Unnormalize actions
             if args_cli.norm_factor_min is not None and args_cli.norm_factor_max is not None:
@@ -394,153 +416,6 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
     return False, traj, recovery_activated_during_rollout, ""
 
 
-
-
-def rollout_transformer(policy, env, success_term, horizon, device):
-    """Perform a single rollout of the policy in the environment, supporting sequence-based models."""
-    policy.start_episode()
-    obs_dict, _ = env.reset()
-    traj = dict(actions=[], obs=[], next_obs=[], sub_obs=[], uncertainties=[])
-
-    context_length = getattr(policy, "n_obs_steps", 1)  # works for transformer or rnn models
-   # print(f"Policy's expected sequence length (policy.n_obs_steps): {getattr(policy, 'n_obs_steps', 1)}")
-
-    obs_seq = []  # list of previous obs for context window
-
-    # Initial obs_dict from env.reset()
-   # print("Initial obs_dict shapes from env.reset():")
-    # for k, v in obs_dict["policy"].items():
-    #     print(f"  policy['{k}']: shape={v.shape}, ndim={v.ndim}")
-
-    # try:
-    #     if hasattr(policy.policy, 'encoder') and hasattr(policy.policy.encoder, 'input_obs_group_shapes'):
-    #         print("Policy's internal expected input_obs_group_shapes:")
-    #         for group, keys in policy.policy.encoder.input_obs_group_shapes.items():
-    #             print(f"  Group '{group}':")
-    #             for k, shape in keys.items():
-    #                 print(f"    Key '{k}': shape={shape}, len(shape)={len(shape)}")
-    #     else:
-    #         print("Could not find policy.policy.encoder.input_obs_group_shapes.")
-    # except Exception as e:
-    #     print(f"Error accessing policy.policy.encoder.input_obs_group_shapes: {e}")
-
-
-    for i in range(horizon):
-        # Prepare current observations from env for policy input
-        current_policy_obs = {}
-        for k, v in obs_dict["policy"].items():
-            # Ensure low-dim observations are 1D (D,)
-            # If env returns (1, D), squeeze the batch dimension
-            if v.ndim > 1 and v.shape[0] == 1:
-                processed_v = v.squeeze(0).to(device) # Apply squeeze
-                # print(f"  DEBUG: Squeezed '{k}' from {v.shape} to {processed_v.shape}") # Add debug print
-            else:
-                processed_v = v.to(device) # No squeeze needed, assume (D,)
-            current_policy_obs[k] = processed_v
-
-        # # AFTER processing, print the shapes in current_policy_obs
-        # if i == 0: # Only print for the first step to avoid spamming
-        #     print("current_policy_obs shapes AFTER squeezing (if applicable):")
-        #     for k, v in current_policy_obs.items():
-        #         print(f"  '{k}': shape={v.shape}, ndim={v.ndim}")
-
-
-        # Handle image observations specifically (if any)
-        if hasattr(env.cfg, "image_obs_list"):
-            for image_name in env.cfg.image_obs_list:
-                if image_name in obs_dict["policy"].keys():
-                    image = obs_dict["policy"][image_name].to(device)
-                    # Assuming image comes as (H, W, C) and needs to be (C, H, W)
-                    # If it's already (1, H, W, C), squeeze the batch dim first.
-                    if image.ndim == 4 and image.shape[0] == 1:
-                        image = image.squeeze(0) # Remove initial batch if present
-
-                    # Permute and normalize after ensuring no batch dim
-                    image = image.permute(2, 0, 1).clone().float() # (C, H, W)
-                    image = image / 255.0
-                    image = image.clip(0.0, 1.0)
-                    current_policy_obs[image_name] = image
-
-
-        # Add subtask terms for logging/analysis, but they are not fed to the policy
-        # as per your trace (only "policy" observations are listed in the policy's encoder).
-        # You had prints for these before, assuming they are okay.
-
-        # Append to context buffer. obs_seq should hold items with shape (D,) or (C, H, W)
-        traj["obs"].append(current_policy_obs) # Store the current, processed observation
-        obs_seq.append(current_policy_obs) # This is what forms the sequence input
-
-        if len(obs_seq) > context_length:
-            obs_seq = obs_seq[-context_length:]
-
-        # Pad if not enough context
-        if len(obs_seq) < context_length:
-            padding_obs = {}
-            for k, v in obs_seq[0].items(): # Use shape of first element in obs_seq for padding
-                # If obs_seq[0][k] is (D,) then zeros_like creates (D,)
-                # If obs_seq[0][k] is (C,H,W) then zeros_like creates (C,H,W)
-                padding_obs[k] = torch.zeros_like(v)
-            obs_seq = [padding_obs] * (context_length - len(obs_seq)) + obs_seq
-
-        # Convert context list to batched sequence dict
-        seq_input = {}
-        for key in obs_seq[0]:
-            # Each step[key] here should be (D,) or (C, H, W)
-            # torch.stack will create (context_length, D) or (context_length, C, H, W)
-            # unsqueeze(0) will add the batch dimension: (1, context_length, D) or (1, context_length, C, H, W)
-            seq_input[key] = torch.stack([step[key] for step in obs_seq], dim=0).to(device=device)
-            #seq_input[key] = torch.stack([step[key] for step in obs_seq], dim=0).unsqueeze(0).to(device=device)
-
-        # Print the final seq_input shapes just before policy call
-        # if i == 0: # Only print for the first step
-        #     print("seq_input shapes for policy just before call:")
-        #     for k, v in seq_input.items():
-        #         print(f"  '{k}': shape={v.shape}, ndim={v.ndim}")
-
-        # if i == 0: # Only print for the first step
-        #     print("seq_input shapes for policy just before policy(seq_input) call (LAST CHECK):")
-        #     for k, v in seq_input.items():
-        #         print(f"  '{k}': shape={v.shape}, ndim={v.ndim}")
-
-        # calculate uncertainty
-        # uncertainty_dict = mc_dropout_uncertainty_eval(policy=policy, obs=seq_input, niters=15)
-        # traj['uncertainties'].append(uncertainty_dict['variance'])
-
-        # Compute action from sequence
-        actions = policy(seq_input)
-
-        #print(f"DEBUG (Pre-Unnorm): Policy output 'actions' shape: {actions.shape}, ndim: {actions.ndim}, type: {type(actions)}")
-
-        # Unnormalize actions
-        if args_cli.norm_factor_min is not None and args_cli.norm_factor_max is not None:
-            actions = (
-                (actions + 1) * (args_cli.norm_factor_max - args_cli.norm_factor_min)
-            ) / 2 + args_cli.norm_factor_min
-        #print(f"DEBUG (Post-Unnorm): Policy output 'actions' shape: {actions.shape}, ndim: {actions.ndim}, type: {type(actions)}")
-        # Convert policy output (torch.Tensor) to numpy array for env.step()
-        # Assume actions comes as (1, Action_Dim) from policy, squeeze to (Action_Dim,)
-        if isinstance(actions, torch.Tensor):
-            # If it's a tensor, convert it to numpy, ensuring it's 1D (7,)
-            # We already know policy returns (7,) so no squeeze is needed *here*.
-            actions = actions.cpu().numpy()
-
-        actions_tensor = torch.from_numpy(actions).to(device=device).float()
-        actions_tensor = actions_tensor.unsqueeze(0) 
-        # Apply actions
-        #obs_dict, _, terminated, truncated, _ = env.step(actions)
-        obs_dict, _, terminated, truncated, _ = env.step(actions_tensor)
-        # Record trajectory - traj["next_obs"] should append the raw observation dictionary from env.step().
-        traj["actions"].append(actions.tolist())
-        traj["next_obs"].append(obs_dict["policy"])
-
-
-        # Check if rollout was successful
-        if bool(success_term.func(env, **success_term.params)[0]):
-            return True, traj
-        elif terminated or truncated:
-            return False, traj
-
-    return False, traj
 
 
 
@@ -614,40 +489,40 @@ def main():
     # Lets set these to the 0.99 confidence
     parameters = {
         'beaker_lift' :{
-            0 : {
-                "confidence_level": 0.010360572377319478,
-                "window_size": 9,
-                "max_peaks": 9
+           0 : {
+                "confidence_level": 0.018646507043923632,
+                "window_size": 15,
+                "max_peaks": 10
             },
             1 : {
-                "confidence_level": 0.012117819935441015,
-                "window_size": 9,
+                "confidence_level": 0.018898154803458085,
+                "window_size": 10,
                 "max_peaks": 9
             },
             2 : {
-                "confidence_level": 0.0114854090040122,
-                "window_size": 9,
-                "max_peaks": 9
+                "confidence_level": 0.017589774107725654,
+                "window_size": 15,
+                "max_peaks": 7
             },
             3 : {
-                "confidence_level": 0.01721086513038985,
-                "window_size": 9,
-                "max_peaks": 9
+                "confidence_level": 0.02829341592326851,
+                "window_size": 12,
+                "max_peaks": 8
             },
             4 : {
-                "confidence_level": 0.01516669949421836,
-                "window_size": 9,
-                "max_peaks": 9
+                "confidence_level": 0.029170220902127186,
+                "window_size": 15,
+                "max_peaks": 11
             },
             5 : {
-                "confidence_level": 0.011445348395548671,
-                "window_size": 9,
-                "max_peaks": 9
+                "confidence_level": 0.017449474558650185,
+                "window_size": 12,
+                "max_peaks": 7
             },
             6 : {
-                "confidence_level": 0.0001330413469565007,
-                "window_size": 15,
-                "max_peaks": 9
+                "confidence_level": 0.6324478323150455,
+                "window_size": 14,
+                "max_peaks": 14
             },
 
         },
@@ -689,6 +564,7 @@ def main():
     failed_no_intervention =[]
     intervention = []
     intervention_success = []
+    knocked=0
     intervention_failure = []
     for trial in range(args_cli.num_rollouts):
         print(f"[INFO] Starting trial {trial}")
@@ -749,15 +625,19 @@ def main():
                 intervention_failure.append(1)
         else:
             intervention.append(0)
-        print(f'Current rate {results.count(True)/len(results)}')
-        print(f"[INFO] Trial {trial}: {terminated}\n")
+        if "knocked" in traj['failure'] or (len(traj['failure']) > 0 and traj['failure'][-1] == "knocked"):
+            knocked+=1
+            
+        print(f'Current success rate: {results.count(True)/len(results):.2%}')
+        print(f'Current intervention rate: {sum(intervention)/len(intervention):.2%} ({sum(intervention)}/{len(intervention)})')
+        print(f"[INFO] Trial {trial}: {'SUCCESS' if terminated else 'FAILED'}\n")
         #loghelper.stopEpoch(trial)
 
     print(f"\nSuccessful trials: {results.count(True)}, out of {len(results)} trials")
     print(f"Success rate: {results.count(True) / len(results)}")
     print(f'Failed runs with no intervention : {sum(failed_no_intervention)}')
     print(f"Intervention rate : {sum(intervention)/len(intervention)}. Of which success : {sum(intervention_success)}, of which failed {sum(intervention_failure)}")
-    
+    print(f"Number of times object knocked over : {knocked}")
     print(f"Trial Results: {results}\n")
 
 

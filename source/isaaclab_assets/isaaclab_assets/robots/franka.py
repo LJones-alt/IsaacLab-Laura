@@ -69,7 +69,7 @@ FRANKA_PANDA_CFG = ArticulationCfg(
             damping=1e2,
         ),
     },
-    soft_joint_pos_limit_factor=1.0,
+    soft_joint_pos_limit_factor=0.9,
 )
 """Configuration of Franka Emika Panda robot."""
 

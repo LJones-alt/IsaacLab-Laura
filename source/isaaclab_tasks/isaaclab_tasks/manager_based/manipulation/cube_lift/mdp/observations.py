@@ -151,6 +151,7 @@ def is_object_lifted(
 ):
     #return true when object z coord above a threshold value 
     object = env.scene[obj_cfg.name]
+    print(f"Object z pos : {object.data.root_pos_w[:, 2]}")
    # if object.data.root_pos_w[:, 2].item() > threshold : 
     #    print(f"Observed Object Lifted : {object.data.root_pos_w[:, 2].item()}")
    #     loghelper.logsubtask(LogType.LIFT)
@@ -161,14 +162,14 @@ def is_object_lifted(
 def ee_frame_pos(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")) -> torch.Tensor:
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     ee_frame_pos = ee_frame.data.target_pos_w[:, 0, :] - env.scene.env_origins[:, 0:3]
-    print(f"EE pos : {ee_frame_pos}")
+    #print(f"EE pos : {ee_frame_pos}")
     return ee_frame_pos
 
 
 def ee_frame_quat(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")) -> torch.Tensor:
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     ee_frame_quat = ee_frame.data.target_quat_w[:, 0, :]
-    print(f"EE quat : {ee_frame_quat}")
+    #print(f"EE quat : {ee_frame_quat}")
     return ee_frame_quat
 
 
@@ -307,3 +308,14 @@ def object_knocked(env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = Sc
      #   print("object knocked")
         return torch.tensor([True], device='cuda:0')
     else :return torch.tensor([False], device='cuda:0')
+
+def target_position(
+    env: ManagerBasedRLEnv,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("scale"),
+  #  loghelper : LoggingHelper = LoggingHelper()
+) -> torch.Tensor:
+    """The position of the object in the robot's root frame."""
+    object: RigidObject = env.scene[object_cfg.name]
+    object_pos_w = object.data.root_pos_w[:, :3]
+    #print(f"target position : {object_pos_w}")
+    return object_pos_w

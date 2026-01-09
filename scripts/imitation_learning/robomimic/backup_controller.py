@@ -19,10 +19,10 @@ class BackupSMWaitTime:
     """Additional wait times (in s) for states for before switching."""
 
     REST = wp.constant(0.5)
-    APPROACH_ABOVE_OBJECT = wp.constant(0.1)
-    APPROACH_OBJECT = wp.constant(0.1)
-    GRASP_OBJECT = wp.constant(0.1)
-    LIFT_OBJECT = wp.constant(0.1)
+    APPROACH_ABOVE_OBJECT = wp.constant(0.3)
+    APPROACH_OBJECT = wp.constant(0.3)
+    GRASP_OBJECT = wp.constant(0.1)  # 1 second wait + 0.3 for gripper to close
+    LIFT_OBJECT = wp.constant(0.3)
     MIDPOINT = wp.constant(0.1)
     APPROACH_ABOVE_GOAL = wp.constant(0.1)
     APPROACH_GOAL = wp.constant(6)
@@ -69,14 +69,26 @@ def infer_state_machine(
     state = sm_state[tid]
     # decide next state
     if state == BackupSM.REST:
-        # go back to reset position
-        des_ee_pose[tid] = rest_ee_pose[tid]
+        # First lift up to a safe height, then go to rest position
+        current_ee_pos = wp.transform_get_translation(ee_pose[tid])
+        rest_pos = wp.transform_get_translation(rest_ee_pose[tid])
+        rest_rot = wp.transform_get_rotation(rest_ee_pose[tid])
+        
+        # If we're below safe height, first move up
+        safe_height = 0.35  # Safe z-height to avoid collisions
+        if current_ee_pos.z < safe_height:
+            # Lift straight up first
+            lift_pos = wp.vec3(current_ee_pos.x, current_ee_pos.y, safe_height)
+            des_ee_pose[tid] = wp.transform(lift_pos, rest_rot)
+        else:
+            # Already at safe height, move to rest position
+            des_ee_pose[tid] = rest_ee_pose[tid]
+        
         gripper_state[tid] = GripperState.CLOSE
-       # print("\n[SM] REST")
         # wait for a while
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
-            wp.transform_get_translation(des_ee_pose[tid]),
+            wp.transform_get_translation(rest_ee_pose[tid]),
             0.02,
         ):
             if sm_wait_time[tid] >= BackupSMWaitTime.REST:
@@ -88,10 +100,10 @@ def infer_state_machine(
        # print("[SM] APPR above obj")
         pose_pos = wp.transform_get_translation(current_object_pose[tid])
         pose_rot = wp.transform_get_rotation(rest_ee_pose[tid])
-        
-        des_ee_pose[tid] = wp.transform(pose_pos, pose_rot)
-        des_ee_pose[tid] = wp.transform_multiply(offset[tid], des_ee_pose[tid])
-        gripper_state[tid] = GripperState.CLOSE
+        # Go to a safe height ABOVE the object (z + 0.15m) with x offset
+        safe_above_pos = wp.vec3(pose_pos.x - 0.1, pose_pos.y, pose_pos.z + 0.15)
+        des_ee_pose[tid] = wp.transform(safe_above_pos, pose_rot)
+        gripper_state[tid] = GripperState.OPEN  # Open gripper in preparation
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
             wp.transform_get_translation(des_ee_pose[tid]),
@@ -126,8 +138,8 @@ def infer_state_machine(
        # print("[SM] GRASP")
         pose_pos = wp.transform_get_translation(current_object_pose[tid])
         pose_rot = wp.transform_get_rotation(rest_ee_pose[tid])
-        # Apply offset in x-direction (5 cm = 0.05 m)
-        offset_pos = wp.vec3() #sample vial + 0.04
+        # Stay at the approach position while closing gripper
+        offset_pos = wp.vec3(pose_pos.x - 0.1, pose_pos.y + 0.02, pose_pos.z + 0.02)
         des_ee_pose[tid] = wp.transform(offset_pos, pose_rot)
         gripper_state[tid] = GripperState.CLOSE
         # wait for a while
@@ -136,6 +148,7 @@ def infer_state_machine(
             print("[SM_INFO] : Moving from GRSP to LIFT_OBJECT")
             sm_state[tid] = BackupSM.LIFT_OBJECT
             sm_wait_time[tid] = 0.0
+            
     elif state == BackupSM.LIFT_OBJECT:
         #print("[SM] LIFT") # uses starting position
         pose_pos = wp.transform_get_translation(object_pose[tid])

@@ -7,19 +7,23 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 from isaaclab.utils import configclass
 from isaaclab.assets import RigidObjectCfg, ArticulationCfg
+from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from source.isaaclab_assets.isaaclab_assets.robots.universal_robots import UR10_CFG
 from . import dev_env_cfg
 import math
 from isaaclab.managers import SceneEntityCfg
 from isaaclab_assets.glassware.glassware import ChemistryGlassware
 from isaaclab_tasks.manager_based.manipulation.cube_lift import mdp
+from isaaclab.managers import TerminationTermCfg as DoneTerm
 ##
 # Pre-defined configs
 ##
 from isaaclab_assets.robots.franka import FRANKA_PANDA_HIGH_PD_CFG  # isort: skip
+from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG
 
 
 
@@ -34,31 +38,34 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         self.scene.scale = glassware.scale(pos=[0.3, -0.3, 0.01])
         
         self.events.reset_object_position = EventTerm(
-            func=mdp.reset_multiple_root_state_uniform,
+            func=mdp.reset_place_root_state_uniform,
             mode="reset",
             params={
                 "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.02, 0.02)},
                 "velocity_range": {},
                 "asset_cfg": SceneEntityCfg("object", body_names="Object"),
-                "asset2_cfg" : SceneEntityCfg("stirplate")
+                "asset2_cfg" : SceneEntityCfg("stirplate"),
+                "asset3_cfg" : SceneEntityCfg("scale")
+
             },
         )
+        #self.scene.robot = UR10e_ROBOTIQ_GRIPPER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
-            # init_state=ArticulationCfg.InitialStateCfg(
-            #     joint_pos={
+            init_state=ArticulationCfg.InitialStateCfg(
+                joint_pos={
                     
-            #         "panda_joint1":  0.3281,
-            #         "panda_joint2": -0.3684,   
-            #         "panda_joint3":  -0.2787,
-            #         "panda_joint4": -2.6138,  
-            #         "panda_joint5":  -2.7527,
-            #         "panda_joint6":  2.4991,  #  +90° → keeps hand level
-            #         "panda_joint7":  0.3331,
-            #         "panda_finger_joint1": 0.04,   # open gripper
-            #         "panda_finger_joint2": 0.04,
-            #     }
-            # ),
+                    "panda_joint1":  0.3281,
+                    "panda_joint2": -0.3684,   
+                    "panda_joint3":  -0.2787,
+                    "panda_joint4": -2.6138,  
+                    "panda_joint5":  -2.7527,
+                    "panda_joint6":  2.4991,  #  +90° → keeps hand level
+                    "panda_joint7":  0.3331,
+                    "panda_finger_joint1": 0.04,   # open gripper
+                    "panda_finger_joint2": 0.04,
+                }
+            ),
         )
         # replace with relative position controller 
         self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
@@ -69,8 +76,10 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
             scale=0.5,
             body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
         )
+        self.terminations.success=DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
 
-
+        self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}
+        )
        
 
 
