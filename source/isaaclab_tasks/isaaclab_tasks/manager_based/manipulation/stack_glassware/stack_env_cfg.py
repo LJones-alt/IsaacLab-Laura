@@ -104,7 +104,7 @@ class ObservationsCfg:
     class SubtaskCfg(ObsGroup):
         """Observations for subtask group."""
 
-        grasp_1 = ObsTerm(
+        grasp = ObsTerm(
             func=mdp.object_grasped,
             params={
                 "robot_cfg": SceneEntityCfg("robot"),
@@ -112,20 +112,12 @@ class ObservationsCfg:
                 "object_cfg": SceneEntityCfg("cube_2"),
             },
         )
-        stack_1 = ObsTerm(
+        stacked = ObsTerm(
             func=mdp.object_stacked,
             params={
                 "robot_cfg": SceneEntityCfg("robot"),
                 "upper_object_cfg": SceneEntityCfg("cube_2"),
                 "lower_object_cfg": SceneEntityCfg("cube_1"),
-            },
-        )
-        grasp_2 = ObsTerm(
-            func=mdp.object_grasped,
-            params={
-                "robot_cfg": SceneEntityCfg("robot"),
-                "ee_frame_cfg": SceneEntityCfg("ee_frame"),
-                "object_cfg": SceneEntityCfg("cube_3"),
             },
         )
 
@@ -153,11 +145,9 @@ class TerminationsCfg:
         func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("cube_2")}
     )
 
-    cube_3_dropping = DoneTerm(
-        func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("cube_3")}
+    success = DoneTerm(
+        func=mdp.cubes_stacked
     )
-
-    success = DoneTerm(func=mdp.cubes_stacked)
 
 
 @configclass

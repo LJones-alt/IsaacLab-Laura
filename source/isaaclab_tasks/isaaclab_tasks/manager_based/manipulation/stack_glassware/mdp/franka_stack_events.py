@@ -231,9 +231,13 @@ def randomize_rigid_objects_in_focus(
             object_states = torch.stack([out_focus_state] * asset.num_objects).to(device=env.device)
             pose_tensor = torch.tensor([pose_list[asset_idx]], device=env.device)
             positions = pose_tensor[:, 0:3] + env.scene.env_origins[cur_env, 0:3]
-            orientations = math_utils.quat_from_euler_xyz(pose_tensor[:, 3], pose_tensor[:, 4], pose_tensor[:, 5])
+            
+            # Keep the current/default orientation instead of randomizing
+            # default_object_state shape is [num_envs, num_objects, 13] - get orientation (indices 3:7)
+            current_orientation = asset.data.default_object_state[cur_env, object_id, 3:7]
+            
             object_states[object_id, 0:3] = positions
-            object_states[object_id, 3:7] = orientations
+            object_states[object_id, 3:7] = current_orientation
 
             asset.write_object_state_to_sim(
                 object_state=object_states, env_ids=torch.tensor([cur_env], device=env.device)

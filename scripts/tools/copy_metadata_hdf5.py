@@ -6,10 +6,11 @@ HDF5_FILE = "docs/subset_first5.hdf5"
 DATA_GROUP = "data"
 
 # Metadata to add
+# robomimic v0.5 requires 'env_kwargs' key (not 'sim_args')
 metadata = {
     "env_name": "Cube-Mimic-v0",
     "type": 2,
-    "sim_args": {
+    "env_kwargs": {
         "dt": 0.01,
         "decimation": 2,
         "render_interval": 2,

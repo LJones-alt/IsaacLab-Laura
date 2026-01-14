@@ -7,7 +7,7 @@
             "terminal_output_to_txt": true,
             "log_tb": true,
             "log_wandb": true,
-            "wandb_proj_name": "pick_place_new_demos_med_qual"
+            "wandb_proj_name": "pick_place_bc_rnn_0.5_mix"
         },
         "save": {
             "enabled": true,
@@ -20,7 +20,7 @@
         },
         "epoch_every_n_steps": 100,
         "validation_epoch_every_n_steps": 10,
-        "env": "Dev-IK-Rel-v1",
+        "env": "Dev-IK-Rel-place-v0",
         "additional_envs": null,
         "render": false,
         "render_video": true,
@@ -28,9 +28,9 @@
         "video_skip": 5,
         "rollout": {
             "enabled": false,
-            "terminate_on_success" : true,
-            "n": 50,                     
-            "horizon": 400,              
+            "terminate_on_success": true,
+            "n": 50,
+            "horizon": 400,
             "rate": 50
         }
     },
@@ -43,13 +43,15 @@
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": "valid",
-        "seq_length": 100,
+        "seq_length": 16,
         "dataset_keys": [
             "actions",
             "rewards",
             "dones"
         ],
-        
+        "action_keys": [
+            "actions"
+        ],
         "goal_mode": null,
         "cuda": true,
         "batch_size": 100,
@@ -76,7 +78,6 @@
             "l1_weight": 0.0,
             "cos_weight": 0.0
         },
-        
         "gmm": {
             "enabled": true,
             "num_modes": 10,
@@ -84,7 +85,6 @@
             "std_activation": "softplus",
             "low_noise_eval": true
         },
-        
         "rnn": {
             "enabled": true,
             "horizon": 100,
@@ -96,7 +96,6 @@
                 "bidirectional": false
             }
         }
-        
     },
     "observation": {
         "modalities": {

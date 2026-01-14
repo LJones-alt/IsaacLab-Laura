@@ -113,10 +113,10 @@ class CubeMimicEnv(ManagerBasedRLMimicEnv):
         delta_rotation_axis = delta_rotation / delta_rotation_angle
 
         # Handle invalid division for the case when delta_rotation_angle is close to zero
-        is_close_to_zero_angle = torch.isclose(delta_rotation_angle, torch.zeros_like(delta_rotation_angle)).squeeze(1)
+        is_close_to_zero_angle = torch.isclose(delta_rotation_angle, torch.zeros_like(delta_rotation_angle)).squeeze(-1)
         delta_rotation_axis[is_close_to_zero_angle] = torch.zeros_like(delta_rotation_axis)[is_close_to_zero_angle]
 
-        delta_quat = PoseUtils.quat_from_angle_axis(delta_rotation_angle.squeeze(1), delta_rotation_axis).squeeze(0)
+        delta_quat = PoseUtils.quat_from_angle_axis(delta_rotation_angle.squeeze(-1), delta_rotation_axis)
         delta_rot_mat = PoseUtils.matrix_from_quat(delta_quat)
         target_rot = torch.matmul(delta_rot_mat, curr_rot)
 
@@ -158,8 +158,32 @@ class CubeMimicEnv(ManagerBasedRLMimicEnv):
         subtask_terms = self.obs_buf["subtask_terms"]
         #signals["appr"] = subtask_terms["appr"][env_ids]
         signals["grasp"] = subtask_terms["grasp"][env_ids]
+        signals["stacked"] = subtask_terms["stacked"][env_ids]
         #signals["lift"] = subtask_terms["lift"][env_ids]
-        signals["appr_goal"] = subtask_terms["appr_goal"][env_ids]
-     #   signals["release_object"] = subtask_terms["release_object"][env_ids]
-        # final subtask is placing cubeC on cubeA (motion relative to cubeA) - but final subtask signal is not needed
+        #signals["appr_goal"] = subtask_terms["appr_goal"][env_ids]
+        #signals["release_object"] = subtask_terms["release_object"][env_ids]
+        # final subtask is placing cube on goal - signal needed when using --annotate_subtask_start_signals
         return signals
+    
+    def get_expected_attached_object(self, eef_name: str, subtask_index: int, env_cfg) -> str | None:
+        """
+        (SkillGen) Return the expected attached object for the given EEF/subtask.
+
+        Assumes 'stack' subtasks place the object grasped in the preceding 'grasp' subtask.
+        Returns None for 'grasp' (or others) at subtask start.
+        """
+        if eef_name not in env_cfg.subtask_configs:
+            return None
+
+        subtask_configs = env_cfg.subtask_configs[eef_name]
+        if not (0 <= subtask_index < len(subtask_configs)):
+            return None
+
+        current_cfg = subtask_configs[subtask_index]
+        # If stacking, expect we are holding the object grasped in the prior subtask
+        if "stack" in str(current_cfg.subtask_term_signal).lower():
+            if subtask_index > 0:
+                prev_cfg = subtask_configs[subtask_index - 1]
+                if "grasp" in str(prev_cfg.subtask_term_signal).lower():
+                    return prev_cfg.object_ref
+        return None

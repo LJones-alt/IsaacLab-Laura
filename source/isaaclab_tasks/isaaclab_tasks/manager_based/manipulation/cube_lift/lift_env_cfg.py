@@ -182,6 +182,14 @@ class ObservationsCfg():
                 "object_cfg": SceneEntityCfg("object"),
             },
         )
+        stacked = ObsTerm(
+            func=mdp.object_stacked,
+            params={
+                "robot_cfg": SceneEntityCfg("robot"),
+                "upper_object_cfg": SceneEntityCfg("object"),
+                "lower_object_cfg": SceneEntityCfg("scale"),
+            },
+        )
         # lift = ObsTerm(
         #     func=mdp.is_object_lifted,
         #     params={
@@ -189,13 +197,13 @@ class ObservationsCfg():
         #         "threshold" : 0.1
         #     }
         # )
-        appr_goal = ObsTerm(
-            func=mdp.object_near_goal,
-            params={ 
-                "threshold": 0.05, 
-                "command_name": "object_pose",
-            },
-        )
+        # appr_goal = ObsTerm(
+        #     func=mdp.object_near_goal,
+        #     params={ 
+        #         "threshold": 0.05, 
+        #         "command_name": "object_pose",
+        #     },
+        # )
         # release_object = ObsTerm(
         #     func=mdp.object_released,
         #     params={
@@ -308,7 +316,8 @@ class TerminationsCfg:
     )
     object_tipped = DoneTerm(func=mdp.object_knocked)
     #fix object dropping
-    success = DoneTerm(func=mdp.object_near_goal)
+    #success = DoneTerm(func=mdp.object_near_goal)
+    success= DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
 
 
 @configclass

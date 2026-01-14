@@ -12,7 +12,7 @@
         "save": {
             "enabled": true,
             "every_n_seconds": null,
-            "every_n_epochs": 50,
+            "every_n_epochs": null,
             "epochs": [],
             "on_best_validation": true,
             "on_best_rollout_return": false,
@@ -43,11 +43,10 @@
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": "valid",
-        "seq_length": 10,
-        "frame_stack": 1,
-        "pad_frame_stack": true,
+        "seq_length": 16,
         "pad_seq_length": true,
-        "get_pad_mask": false,
+        "frame_stack": 2,
+        "pad_frame_stack": true,
         "goal_mode": null,
         "dataset_keys": [
             "actions",
@@ -58,8 +57,8 @@
             "actions"
         ],
         "cuda": true,
-        "batch_size": 256,
-        "num_epochs": 3000,
+        "batch_size": 128,
+        "num_epochs": 1000,
         "seed": 101
     },
     "algo": {
@@ -68,9 +67,12 @@
                 "optimizer_type": "adamw",
                 "learning_rate": {
                     "initial": 0.0001,
-                    "decay_factor": 1.0,
+                    "decay_factor": 0.1,
                     "epoch_schedule": [],
-                    "scheduler_type": "constant_with_warmup"
+                    "scheduler_type": "cosine",
+                    "step_every_batch": true,
+                    "warmup_steps": 500,
+                    "num_cycles": 0.5
                 },
                 "regularization": {
                     "L2": 0.0001
@@ -79,7 +81,7 @@
         },
         "horizon": {
             "observation_horizon": 2,
-            "action_horizon": 8,
+            "action_horizon": 4,
             "prediction_horizon": 16
         },
         "unet": {

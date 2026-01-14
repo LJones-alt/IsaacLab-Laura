@@ -429,8 +429,9 @@ class RecorderManager(ManagerBase):
         """Get the episode metadata."""
         if not hasattr(self._env.cfg, "get_ep_meta"):
             # Add basic episode metadata
+            # robomimic v0.5 requires 'env_kwargs' key (not 'sim_args')
             ep_meta = dict()
-            ep_meta["sim_args"] = {
+            ep_meta["env_kwargs"] = {
                 "dt": self._env.cfg.sim.dt,
                 "decimation": self._env.cfg.decimation,
                 "render_interval": self._env.cfg.sim.render_interval,

@@ -40,6 +40,7 @@
         "num_data_workers": 4,
         "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
+        "hdf5_load_next_obs": false,
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": "valid",
@@ -70,7 +71,10 @@
                     "initial": 0.0001,
                     "decay_factor": 1.0,
                     "epoch_schedule": [],
-                    "scheduler_type": "constant_with_warmup"
+                    "scheduler_type": "cosine",
+                    "step_every_batch": true,
+                    "warmup_steps": 500,
+                    "num_cycles": 0.5
                 },
                 "regularization": {
                     "L2": 0.0001

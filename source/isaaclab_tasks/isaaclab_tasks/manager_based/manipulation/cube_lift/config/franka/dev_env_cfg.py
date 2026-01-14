@@ -67,6 +67,9 @@ class FrankaDevEnvCfg(CubeEnvCfg):
             open_command_expr={"panda_finger_.*": 0.04},
             close_command_expr={"panda_finger_.*": 0.0},
         )
+        self.gripper_joint_names = ["panda_finger_.*"]
+        self.gripper_open_val = 0.04
+        self.gripper_threshold = 0.005
         # Set the body name for the end effector
         self.commands.object_pose.body_name = "panda_hand"
         self.commands.object_pose.body_name = "panda_hand"

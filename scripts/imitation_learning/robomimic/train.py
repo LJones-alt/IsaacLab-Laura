@@ -87,7 +87,7 @@ import isaaclab_tasks  # noqa: F401
 import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 
 
-def normalize_hdf5_actions(config: Config, log_dir: str) -> str:
+def normalize_hdf5_actions(config: Config, log_dir: str) -> list:
     """Normalizes actions in hdf5 dataset to [-1, 1] range.
 
     Args:
@@ -95,14 +95,22 @@ def normalize_hdf5_actions(config: Config, log_dir: str) -> str:
         log_dir: Directory to save normalization parameters.
 
     Returns:
-        Path to the normalized dataset.
+        List of dataset configs with normalized paths (robomimic v0.5 format).
     """
-    base, ext = os.path.splitext(config.train.data)
+    # Handle both string path and list format (robomimic v0.5)
+    if isinstance(config.train.data, str):
+        original_path = config.train.data
+    elif isinstance(config.train.data, list):
+        original_path = config.train.data[0]["path"]
+    else:
+        raise ValueError(f"Unexpected config.train.data type: {type(config.train.data)}")
+    
+    base, ext = os.path.splitext(original_path)
     normalized_path = base + "_normalized" + ext
 
     # Copy the original dataset
     print(f"Creating normalized dataset at {normalized_path}")
-    shutil.copyfile(config.train.data, normalized_path)
+    shutil.copyfile(original_path, normalized_path)
 
     # Open the new dataset and normalize the actions
     with h5py.File(normalized_path, "r+") as f:
@@ -126,11 +134,12 @@ def normalize_hdf5_actions(config: Config, log_dir: str) -> str:
             f[path] = normalized_data
 
         # Save the min and max values to log directory
-        with open(os.path.join(log_dir, "normalization_params.txt"), "w") as f:
-            f.write(f"min: {min}\n")
-            f.write(f"max: {max}\n")
+        with open(os.path.join(log_dir, "normalization_params.txt"), "w") as norm_f:
+            norm_f.write(f"min: {min}\n")
+            norm_f.write(f"max: {max}\n")
 
-    return normalized_path
+    # Return in robomimic v0.5 list format
+    return [{"path": normalized_path}]
 
 
 def train(config: Config, device: str, log_dir: str, ckpt_dir: str, video_dir: str):
@@ -164,17 +173,29 @@ def train(config: Config, device: str, log_dir: str, ckpt_dir: str, video_dir: s
     # read config to set up metadata for observation modalities (e.g. detecting rgb observations)
     ObsUtils.initialize_obs_utils_with_config(config)
 
-    # make sure the dataset exists
-    dataset_path = os.path.expanduser(config.train.data)
+    # robomimic v0.5: config.train.data is a list of dataset configs
+    # Verify dataset exists (conversion already done in main() before lock)
+    dataset_path = os.path.expanduser(config.train.data[0]["path"])
     if not os.path.exists(dataset_path):
         raise FileNotFoundError(f"Dataset at provided path {dataset_path} not found!")
-
-    # load basic metadata from training file
+    
+    # load basic metadata from training file (use first dataset)
     print("\n============= Loaded Environment Metadata =============")
-    env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=config.train.data)
+    
+    env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=dataset_path)
+    # robomimic v0.5 changed API: now expects dataset_config dict with "path" key
+    print(f"config.train.data: {config.train.data}")
+    dataset_config = config.train.data[0]
+   
+    print(f"Dataset Config: {dataset_config}")
+    
     shape_meta = FileUtils.get_shape_metadata_from_dataset(
-        dataset_path=config.train.data, all_obs_keys=config.all_obs_keys, verbose=True
+        dataset_config=dataset_config,
+        action_keys=config.train.action_keys,
+        all_obs_keys=config.all_obs_keys,
+        verbose=True
     )
+    print(f"shape_meta: {shape_meta}\n")
 
     if config.experiment.env is not None:
         env_meta["env_name"] = config.experiment.env
@@ -202,9 +223,29 @@ def train(config: Config, device: str, log_dir: str, ckpt_dir: str, video_dir: s
             print(envs[env.name])
 
     print("")
+    print(f"obs keys : {shape_meta['all_obs_keys']}")
+
+    
+    # load training data BEFORE model creation (robomimic v0.5 requirement)
+    trainset, validset = TrainUtils.load_data_for_training(config, obs_keys=shape_meta["all_obs_keys"])
+    train_sampler = trainset.get_dataset_sampler()
+    print("\n============= Training Dataset =============")
+    print(trainset)
+    print("")
+
+    # robomimic v0.5: set num_train_batches and num_epochs in optim_params before model creation
+    train_num_steps = config.experiment.epoch_every_n_steps
+    for k in config.algo.optim_params:
+        config.algo.optim_params[k]["num_train_batches"] = len(trainset) if train_num_steps is None else train_num_steps
+        config.algo.optim_params[k]["num_epochs"] = config.train.num_epochs
 
     # setup for a new training run
-    data_logger = DataLogger(log_dir, config=config, log_tb=config.experiment.logging.log_tb)
+    data_logger = DataLogger(
+        log_dir,
+        config=config,
+        log_tb=config.experiment.logging.log_tb,
+        log_wandb=config.experiment.logging.log_wandb,
+    )
     model = algo_factory(
         algo_name=config.algo_name,
         config=config,
@@ -219,13 +260,6 @@ def train(config: Config, device: str, log_dir: str, ckpt_dir: str, video_dir: s
 
     print("\n============= Model Summary =============")
     print(model)  # print model summary
-    print("")
-
-    # load training data
-    trainset, validset = TrainUtils.load_data_for_training(config, obs_keys=shape_meta["all_obs_keys"])
-    train_sampler = trainset.get_dataset_sampler()
-    print("\n============= Training Dataset =============")
-    print(trainset)
     print("")
 
     # maybe retrieve statistics for normalizing observations
@@ -390,10 +424,16 @@ def main(args: argparse.Namespace):
     # change location of experiment directory
     config.train.output_dir = os.path.abspath(os.path.join("./logs", args.log_dir, args.task))
 
-    log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config)
+    # robomimic v0.5+ returns 4 values: log_dir, output_dir, video_dir, time_dir
+    log_dir, ckpt_dir, video_dir, _ = TrainUtils.get_exp_dir(config)
 
     if args.normalize_training_actions:
         config.train.data = normalize_hdf5_actions(config, log_dir)
+
+    # robomimic v0.5: config.train.data must be a list of dataset configs
+    # Convert single path string to list format if needed (must be done before lock)
+    if isinstance(config.train.data, str):
+        config.train.data = [{"path": os.path.expanduser(config.train.data)}]
 
     # get torch device
     device = TorchUtils.get_torch_device(try_to_use_cuda=config.train.cuda)
@@ -430,7 +470,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--task", type=str, default=None, help="Name of the task.")
     parser.add_argument("--algo", type=str, default=None, help="Name of the algorithm.")
-    parser.add_argument("--log_dir", type=str, default="robomimic", help="Path to log directory")
+    parser.add_argument("--log_dir", type=str, default="docs/place/model", help="Path to log directory")
     parser.add_argument("--normalize_training_actions", action="store_true", default=False, help="Normalize actions")
     parser.add_argument(
         "--epochs",

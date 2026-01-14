@@ -28,7 +28,7 @@ from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG
 
 
 @configclass
-class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
+class FrankaDevEnvSkillgenCfg(dev_env_cfg.FrankaDevEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
@@ -80,16 +80,8 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
 
         #self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}
         #)
+        # for f in self.scene.ee_frame.target_frames:
+        #     if f.name == "end_effector":
+        #         f.offset.pos = [0.0, 0.0, 0.0]
+        #         break
        
-
-
-@configclass
-class FrankaCubeEnvCfg_PLAY(FrankaDevEnvCfg):
-    def __post_init__(self):
-        # post init of parent
-        super().__post_init__()
-        # make a smaller scene for play
-        self.scene.num_envs = 50
-        self.scene.env_spacing = 2.5
-        # disable randomization for play
-        self.observations.policy.enable_corruption = False

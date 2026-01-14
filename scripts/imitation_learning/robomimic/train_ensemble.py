@@ -175,10 +175,32 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
     # load basic metadata from training file
     print("\n============= Loaded Environment Metadata =============")
     env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=config.train.data)
-    shape_meta = FileUtils.get_shape_metadata_from_dataset(
-        dataset_path=config.train.data, all_obs_keys=config.all_obs_keys, verbose=True
-    )
+    print(f"config.train.data: {config.train.data}")
+    with config.values_unlocked():
+        config.train.data = [{'path': 'docs/place/glassware_stack_demos_split_normalized.hdf5'}]
+    ####### HARD CODED MAKE SURE THIS GETS UPDATED #########
+    config_list= [{'path': 'docs/place/glassware_stack_demos_split_normalized.hdf5'}]
+    print(f"config.train.data: {config.train.data}")
+    # print(f"config_list: {config_list}")
+    # if isinstance(config.train.data, str):
+    #     datasets = []
+    #     datasets.append(config.train.data)
+    #     dataset_config = {"path": datasets}
+    # elif isinstance(config.train.data, dict):
+    #     datasets = []
+    #     dataset_config= (config.train.data)
+    # dataset_config=  {'path': 'docs/place/glassware_stack_demos_split_normalized.hdf5',}
+    # print(f"Dataset Config: {dataset_config}")
 
+    dataset_config = config.train.data[0]
+    shape_meta = FileUtils.get_shape_metadata_from_dataset(
+        dataset_config=dataset_config,
+        action_keys=config.train.action_keys,
+        all_obs_keys=config.all_obs_keys,
+        verbose=True
+    )
+    print(f"shape_meta: {shape_meta}\n")
+    
     if config.experiment.env is not None:
         env_meta["env_name"] = config.experiment.env
         print("=" * 30 + "\n" + "Replacing Env to {}\n".format(env_meta["env_name"]) + "=" * 30)
@@ -205,7 +227,7 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
             print(envs[env.name])
 
     print("")
-
+    print(f"obs keys : {shape_meta['all_obs_keys']}")
 
     # load training data
     trainset, validset = TrainUtils.load_data_for_training(config, obs_keys=shape_meta["all_obs_keys"])
@@ -427,31 +449,22 @@ def keep_data_percentage(trainset, percentage):
     return trainset
 
 
-def create_bootstrap_sample(trainset, seed: int):
-    """Create a bootstrap sample (sampling with replacement) from the training set.
-    
-    Each bootstrap sample contains N samples drawn with replacement from the original
-    dataset of size N. On average, ~63.2% of samples will be unique, with ~36.8% duplicates.
-    This creates diversity across ensemble members.
+def create_bootstrap_sample(trainset, seed: int, percent: float = 0.5):
+    """Create a random sample (without replacement) of a percentage of the training set.
     
     Args:
         trainset: The original training dataset.
         seed: Random seed for reproducibility.
-        
+        percent: Fraction of the dataset to sample (default 0.75 for 75%).
     Returns:
-        A Subset of the training data with bootstrap sampling.
+        A Subset of the training data with random sampling (no replacement).
     """
     np.random.seed(seed)
     total_size = len(trainset)
-    # Sample WITH replacement - same sample can appear multiple times
-    indices = np.random.choice(total_size, size=total_size, replace=True)
-    
-    # Count unique samples
-    unique_count = len(np.unique(indices))
-    unique_percent = (unique_count / total_size) * 100
-    
-    print(f"Bootstrap sample created: {unique_count}/{total_size} unique samples ({unique_percent:.1f}%)")
-    
+    sample_size = int(total_size * percent)
+    indices = np.random.choice(total_size, size=sample_size, replace=False)
+    indices = np.sort(indices)
+    print(f"Random sample created: {sample_size}/{total_size} samples ({percent*100:.1f}%)")
     return Subset(trainset, indices)
 
 
@@ -515,7 +528,7 @@ def main(args: argparse.Namespace):
         
         new_output_dir = f"{original_output_dir}/model{i}/"
         config.train.output_dir = new_output_dir
-        log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config)
+        log_dir, ckpt_dir, video_dir, _ = TrainUtils.get_exp_dir(config)
 
         log_dirs.append(log_dir)
         ckpt_dirs.append(ckpt_dir)

@@ -21,8 +21,8 @@ from isaaclab_tasks.manager_based.manipulation.stack_glassware.stack_env_cfg imp
 # Pre-defined configs
 ##
 from isaaclab.markers.config import FRAME_MARKER_CFG  # isort: skip
-from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG  # isort: skip
-
+from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
+from isaaclab_assets.glassware.glassware import ChemistryGlassware
 
 @configclass
 class EventCfg:
@@ -32,7 +32,8 @@ class EventCfg:
         func=franka_stack_events.set_default_joint_pose,
         mode="reset",
         params={
-            "default_pose": [0.0444, -0.1894, -0.1107, -2.5148, 0.0044, 2.3775, 0.6952, 0.0400, 0.0400],
+            "default_pose": [0.3281, -0.3684, -0.2787, -2.6138, -2.7527, 2.4999, 0.3331, 0.0400, 0.0400],
+            #"default_pose": [0.0444, -0.1894, -0.1107, -2.5148, 0.0044, 2.3775, 0.6952, 0.0400, 0.0400],
         },
     )
 
@@ -50,8 +51,8 @@ class EventCfg:
         func=franka_stack_events.randomize_object_pose,
         mode="reset",
         params={
-            "pose_range": {"x": (0.4, 0.6), "y": (-0.10, 0.10), "z": (0.0203, 0.0203), "yaw": (-1.0, 1, 0)},
-            "min_separation": 0.1,
+            "pose_range": {"x": (0.4, 0.6), "y": (-0.10, 0.10), "z": (0.0203, 0.0203)},
+            "min_separation": 0.4,
             "asset_cfgs": [SceneEntityCfg("cube_1"), SceneEntityCfg("cube_2"), SceneEntityCfg("cube_3")],
         },
     )
@@ -101,38 +102,11 @@ class FrankaCubeStackEnvCfg(StackEnvCfg):
             max_depenetration_velocity=5.0,
             disable_gravity=False,
         )
-
+        glassware = ChemistryGlassware()
         # Set each stacking cube deterministically
-        self.scene.cube_1 = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Cube_1",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.4, 0.0, 0.0203], rot=[1, 0, 0, 0]),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/blue_block.usd",
-                scale=(1.0, 1.0, 1.0),
-                rigid_props=cube_properties,
-                semantic_tags=[("class", "cube_1")],
-            ),
-        )
-        self.scene.cube_2 = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Cube_2",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.55, 0.05, 0.0203], rot=[1, 0, 0, 0]),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/red_block.usd",
-                scale=(1.0, 1.0, 1.0),
-                rigid_props=cube_properties,
-                semantic_tags=[("class", "cube_2")],
-            ),
-        )
-        self.scene.cube_3 = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Cube_3",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.60, -0.1, 0.0203], rot=[1, 0, 0, 0]),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/green_block.usd",
-                scale=(1.0, 1.0, 1.0),
-                rigid_props=cube_properties,
-                semantic_tags=[("class", "cube_3")],
-            ),
-        )
+        self.scene.cube_1 = glassware.scale(pos=[0.4, -0.35, 0.01], name="cube_1"),
+        self.scene.cube_2 = glassware.beaker(pos=[0.45, 0.25, 0.02], name="cube_2"),
+       
 
         # Listens to the required transforms
         marker_cfg = FRAME_MARKER_CFG.copy()

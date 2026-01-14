@@ -151,7 +151,7 @@ def is_object_lifted(
 ):
     #return true when object z coord above a threshold value 
     object = env.scene[obj_cfg.name]
-    print(f"Object z pos : {object.data.root_pos_w[:, 2]}")
+   # print(f"Object z pos : {object.data.root_pos_w[:, 2]}")
    # if object.data.root_pos_w[:, 2].item() > threshold : 
     #    print(f"Observed Object Lifted : {object.data.root_pos_w[:, 2].item()}")
    #     loghelper.logsubtask(LogType.LIFT)
@@ -304,10 +304,8 @@ def object_tilt (env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = Scen
 def object_knocked(env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = SceneEntityCfg("object"), max_tilt: float = 45):
     object: RigidObject = env.scene[upper_object_cfg.name]
     tilt_deg = upright_tilt_deg(object.data.root_quat_w, object.data.default_root_state[:, 3:7])
-    if tilt_deg.cpu().detach().numpy()[0] > max_tilt:
-     #   print("object knocked")
-        return torch.tensor([True], device='cuda:0')
-    else :return torch.tensor([False], device='cuda:0')
+    # Return a bool tensor with shape (num_envs,) for proper batching
+    return tilt_deg > max_tilt
 
 def target_position(
     env: ManagerBasedRLEnv,
@@ -319,3 +317,27 @@ def target_position(
     object_pos_w = object.data.root_pos_w[:, :3]
     #print(f"target position : {object_pos_w}")
     return object_pos_w
+
+
+def target_pose(
+    env: ManagerBasedRLEnv,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("scale"),
+) -> torch.Tensor:
+    """The pose (position + quaternion) of the target object in world frame.
+    
+    Returns:
+        Tensor of shape (num_envs, 7) containing [x, y, z, qw, qx, qy, qz].
+    """
+    object: RigidObject = env.scene[object_cfg.name]
+    object_pos_w = object.data.root_pos_w[:, :3]  # (num_envs, 3)
+    object_quat_w = object.data.root_quat_w  # (num_envs, 4) - already wxyz format
+    return torch.cat([object_pos_w, object_quat_w], dim=-1)  # (num_envs, 7)
+
+# def object_distance_to_goal(
+#     env: ManagerBasedRLEnv, 
+#     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+#     goal_object_location: SceneEntityCfg = SceneEntityCfg("vialrack"),
+#     ) -> torch.Tensor:
+
+    
+

@@ -126,7 +126,7 @@ class CuroboPlannerCfg:
     time_dilation_factor: float = 1.0
     """Time dilation factor for planning."""
 
-    surface_sphere_radius: float = 0.005
+    surface_sphere_radius: float = 0.001
     """Radius of surface spheres for collision checking."""
 
     # Debug and visualization
@@ -136,13 +136,13 @@ class CuroboPlannerCfg:
     motion_step_size: float | None = None
     """Step size (in radians) for retiming motion plans. If None, no retiming."""
 
-    visualize_spheres: bool = False
+    visualize_spheres: bool = True
     """Visualize robot collision spheres. Note: only works for env 0."""
 
     visualize_plan: bool = False
     """Visualize motion plan in Rerun. Note: only works for env 0."""
 
-    debug_planner: bool = False
+    debug_planner: bool = True
     """Enable detailed motion planning debug information."""
 
     sphere_update_freq: int = 5
@@ -442,14 +442,14 @@ class CuroboPlannerCfg:
     def franka_beaker_config(cls) -> "CuroboPlannerCfg":
         """Create configuration for Franka stacking a normal cube."""
         config = cls.franka_config()
-        config.static_objects = ["table"]
+        config.static_objects = ["table", "scale"]
         config.visualize_plan = True
         config.debug_planner = True
         config.motion_noise_scale = 0.02
         config.collision_activation_distance = 0.0
         config.approach_distance = 0.05
         config.retreat_distance = 0.05
-        config.surface_sphere_radius = 0.005
+        config.surface_sphere_radius = 0.001
         config.get_world_config = lambda: config._get_world_config_with_table_adjustment()
         return config
 
@@ -469,7 +469,7 @@ class CuroboPlannerCfg:
             return cls.franka_stack_cube_bin_config()
         elif "stack-cube" in task_lower:
             return cls.franka_stack_cube_config()
-        elif "Cube-Mimic" in task_lower:
+        elif "cube-ik-rel" in task_lower:
             return cls.franka_beaker_config()
         else:
             # Default to Franka configuration

@@ -32,11 +32,13 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
-        # put the beaker on the stir plate
+        # get the vial from the stirplate and place in vial rack 
         glassware = ChemistryGlassware()
+        self.scene.object=glassware.vial(pos=[0.5, 0.0, 0.02],name="Object")
         self.scene.stirplate = glassware.stirplate(pos=[0.5, 0.0, 0.01])
-        self.scene.scale = glassware.scale(pos=[0.3, -0.3, 0.01])
-        
+
+        self.scene.vialrack = glassware.vialrack(pos=[0.3, -0.3, 0.01])
+
         self.events.reset_object_position = EventTerm(
             func=mdp.reset_place_root_state_uniform,
             mode="reset",
@@ -76,7 +78,7 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
             scale=0.5,
             body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
         )
-        #self.terminations.success=DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
+        self.terminations.success=DoneTerm(func=mdp.object_inserted_upright, params={"lower_object_cfg": SceneEntityCfg("vialrack")})
 
         #self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}
         #)

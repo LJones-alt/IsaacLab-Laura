@@ -30,7 +30,7 @@ class SwitchingLogic:
             return True
         return False
 
-s
+
     def check(self, uncertainties, step) -> bool:
         # 1. Update windows
         for joint_num, unc in enumerate(uncertainties):

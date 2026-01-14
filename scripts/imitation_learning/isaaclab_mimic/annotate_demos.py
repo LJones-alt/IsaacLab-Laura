@@ -210,6 +210,10 @@ def main():
     # Disable all termination terms
     env_cfg.terminations = None
 
+    # Note: We keep events enabled as the reset_to() function applies state AFTER events run,
+    # so the recorded state should override any randomization. If object placement is still
+    # inaccurate, try using --device cuda:0 instead of --device cpu.
+
     # Set up recorder terms for mimic annotations
     env_cfg.recorders = MimicRecorderManagerCfg()
     if not args_cli.auto:

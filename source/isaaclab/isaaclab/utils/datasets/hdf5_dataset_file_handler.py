@@ -56,8 +56,9 @@ class HDF5DatasetFileHandler(DatasetFileHandlerBase):
         # set environment arguments
         # the environment type (we use gym environment type) is set to be compatible with robomimic
         # Ref: https://github.com/ARISE-Initiative/robomimic/blob/master/robomimic/envs/env_base.py#L15
+        # robomimic v0.5 requires 'env_kwargs' key (not 'sim_args')
         env_name = env_name if env_name is not None else ""
-        self.add_env_args({"env_name": env_name, "type": 2})
+        self.add_env_args({"env_name": env_name, "type": 2, "env_kwargs": {}})
 
     def __del__(self):
         """Destructor for the file handler."""
@@ -176,6 +177,16 @@ class HDF5DatasetFileHandler(DatasetFileHandlerBase):
 
         for key, value in episode.data.items():
             create_dataset_helper(h5_episode_group, key, value)
+
+        # robomimic v0.5: generate next_obs by shifting obs by 1 timestep
+        if "obs" in episode.data and isinstance(episode.data["obs"], dict):
+            next_obs_group = h5_episode_group.create_group("next_obs")
+            for obs_key, obs_value in episode.data["obs"].items():
+                if isinstance(obs_value, torch.Tensor):
+                    obs_np = obs_value.cpu().numpy()
+                    # next_obs[t] = obs[t+1], last timestep duplicated
+                    next_obs_np = np.concatenate([obs_np[1:], obs_np[-1:]], axis=0)
+                    next_obs_group.create_dataset(obs_key, data=next_obs_np, compression="gzip")
 
         # increment total step counts
         self._hdf5_data_group.attrs["total"] += h5_episode_group.attrs["num_samples"]

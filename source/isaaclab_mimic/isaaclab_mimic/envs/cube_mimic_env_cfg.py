@@ -26,7 +26,7 @@ class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
         self.datagen_config.name = "beaker_rand_scale_D0"
         self.datagen_config.generation_guarantee = True
         self.datagen_config.generation_keep_failed = False
-        self.datagen_config.generation_num_trials = 100
+        self.datagen_config.generation_num_trials = 10
         self.datagen_config.generation_select_src_per_subtask = True
         self.datagen_config.generation_transform_first_robot_pose = False
         self.datagen_config.generation_interpolate_from_last_target_pose = True
@@ -81,6 +81,8 @@ class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
                 num_fixed_steps=0,
                 # If True, apply action noise during the interpolation phase and execution
                 apply_noise_during_interpolation=False,
+                description="Grasp Glassware",
+                next_subtask_description="Stack glassware on scale",
             )
         )
         #lift ? 
@@ -106,29 +108,29 @@ class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
         #         apply_noise_during_interpolation=False,
         #     )
         # )
-        subtask_configs.append(
-            SubTaskConfig(
-                # Each subtask involves manipulation with respect to a single object frame.
-                object_ref="object",
-                # End of final subtask does not need to be detected
-                # This is actually the lift 
-                subtask_term_signal="appr_goal",
-                # No time offsets for the final subtask
-                subtask_term_offset_range=(10, 20),
-                # Selection strategy for source subtask segment
-                selection_strategy="nearest_neighbor_robot_distance",
-                # Optional parameters for the selection strategy function
-                selection_strategy_kwargs={"nn_k": 3},
-                # Amount of action noise to apply during this subtask
-                action_noise=0.03,
-                # Number of interpolation steps to bridge to this subtask segment
-                num_interpolation_steps=5,
-                # Additional fixed steps for the robot to reach the necessary pose
-                num_fixed_steps=0,
-                # If True, apply action noise during the interpolation phase and execution
-                apply_noise_during_interpolation=False,
-            )
-        )
+        # subtask_configs.append(
+        #     SubTaskConfig(
+        #         # Each subtask involves manipulation with respect to a single object frame.
+        #         object_ref="object",
+        #         # End of final subtask does not need to be detected
+        #         # This is actually the lift 
+        #         subtask_term_signal="appr_goal",
+        #         # No time offsets for the final subtask
+        #         subtask_term_offset_range=(10, 20),
+        #         # Selection strategy for source subtask segment
+        #         selection_strategy="nearest_neighbor_robot_distance",
+        #         # Optional parameters for the selection strategy function
+        #         selection_strategy_kwargs={"nn_k": 3},
+        #         # Amount of action noise to apply during this subtask
+        #         action_noise=0.03,
+        #         # Number of interpolation steps to bridge to this subtask segment
+        #         num_interpolation_steps=5,
+        #         # Additional fixed steps for the robot to reach the necessary pose
+        #         num_fixed_steps=0,
+        #         # If True, apply action noise during the interpolation phase and execution
+        #         apply_noise_during_interpolation=False,
+        #     )
+        # )
 
         subtask_configs.append(
             SubTaskConfig(
@@ -136,11 +138,11 @@ class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
                 object_ref="object",
                 # End of final subtask - when using --annotate_subtask_start_signals, 
                 # the last subtask must also have a signal name
-                subtask_term_signal="success",
+                subtask_term_signal="stacked",
                 # No time offsets for the final subtask
                 subtask_term_offset_range=(0, 0),
                 # Selection strategy for source subtask segment
-                selection_strategy="nearest_neighbor_robot_distance",
+                selection_strategy="nearest_neighbor_object_distance",
                 # Optional parameters for the selection strategy function
                 selection_strategy_kwargs={"nn_k": 3},
                 # Amount of action noise to apply during this subtask
@@ -151,6 +153,7 @@ class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
                 num_fixed_steps=0,
                 # If True, apply action noise during the interpolation phase and execution
                 apply_noise_during_interpolation=False,
+                description="Stack glassware on scale",
             )
         )
 

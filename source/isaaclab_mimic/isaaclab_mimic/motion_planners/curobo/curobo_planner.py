@@ -181,7 +181,7 @@ class CuroboPlanner(MotionPlannerBase):
         self.n_repeat: int | None = self.config.n_repeat
         self.step_size: float | None = self.config.motion_step_size
         self.visualize_plan: bool = self.config.visualize_plan
-        self.visualize_spheres: bool = self.config.visualize_spheres
+        self.visualize_spheres: bool = False
 
         # Log the config parameter values
         self.logger.info(f"Config parameter values: {self.config}")

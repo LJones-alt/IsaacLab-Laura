@@ -147,13 +147,22 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
         "env_cfg_entry_point": f"{__name__}.dev_ik_rel_env_place:FrankaDevEnvCfg",
-       
         "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_rnn_low_dim.json"),
         "robomimic_bc_trans_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_trans.json"),
         "robomimic_hbc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/hbc.json"),
         "robomimic_bcq_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bcq.json"),
         "robomimic_diffusion_policy_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/diffusion_policy.json"),
-       
+
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
+    id="Dev-IK-Rel-Place-Skillgen-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.dev_ik_rel_skillgen:FrankaDevEnvSkillgenCfg",
+        "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_rnn_low_dim.json"),
     },
     disable_env_checker=True,
 )

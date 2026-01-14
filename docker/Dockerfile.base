@@ -77,14 +77,16 @@ RUN mkdir -p ${ISAACSIM_ROOT_PATH}/kit/cache && \
     mkdir -p ${DOCKER_USER_HOME}/Documents
 
 # for singularity usage, create NVIDIA binary placeholders
-RUN touch /bin/nvidia-smi && \
-    touch /bin/nvidia-debugdump && \
-    touch /bin/nvidia-persistenced && \
-    touch /bin/nvidia-cuda-mps-control && \
-    touch /bin/nvidia-cuda-mps-server && \
-    touch /etc/localtime && \
-    mkdir -p /var/run/nvidia-persistenced && \
-    touch /var/run/nvidia-persistenced/socket
+# NOTE: These are only needed for Singularity, not Docker
+# For Docker, comment these out as they override the real nvidia binaries
+# RUN touch /bin/nvidia-smi && \
+#     touch /bin/nvidia-debugdump && \
+#     touch /bin/nvidia-persistenced && \
+#     touch /bin/nvidia-cuda-mps-control && \
+#     touch /bin/nvidia-cuda-mps-server && \
+#     touch /etc/localtime && \
+#     mkdir -p /var/run/nvidia-persistenced && \
+#     touch /var/run/nvidia-persistenced/socket
 
 # installing Isaac Lab dependencies
 # use pip caching to avoid reinstalling large packages

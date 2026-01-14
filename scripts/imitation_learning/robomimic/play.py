@@ -178,6 +178,8 @@ def main():
         results.append(terminated)
         print(f"[INFO] Trial {trial}: {terminated}\n")
 
+    print(f"\n Environment summary : {env}")
+    # Print results
     print(f"\nSuccessful trials: {results.count(True)}, out of {len(results)} trials")
     print(f"Success rate: {results.count(True) / len(results)}")
     print(f"Trial Results: {results}\n")
