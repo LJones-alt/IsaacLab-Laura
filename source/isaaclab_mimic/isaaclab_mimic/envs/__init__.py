@@ -5,6 +5,7 @@
 
 """Sub-package with environment wrappers for Isaac Lab Mimic."""
 
+import isaaclab_mimic.envs.cube_mimic_vm_env_cfg
 import gymnasium as gym
 
 from .franka_bin_stack_ik_rel_mimic_env_cfg import FrankaBinStackIKRelMimicEnvCfg
@@ -19,6 +20,8 @@ from .franka_stack_ik_rel_visuomotor_mimic_env_cfg import FrankaCubeStackIKRelVi
 from .cube_blueprint_mimic_env_cfg import CubeBlueprintMimicEnvCfg
 from .cube_mimic_env_cfg import CubeMimicEnvCfg
 from .cube_mimic_env import CubeMimicEnv
+from .cube_mimic_vm_env_cfg import CubeMimicVMEnvCfg
+from .cube_mimic_vm_env import CubeMimicVMEnv
 from .cube_mimic_env_skillgen_cfg import CubeMimicEnvSkillgenCfg
 ##
 # Inverse Kinematics - Relative Pose Control
@@ -196,6 +199,15 @@ gym.register(
     entry_point="isaaclab_mimic.envs:CubeMimicEnv",
     kwargs={
         "env_cfg_entry_point": cube_blueprint_mimic_env_cfg.CubeBlueprintMimicEnvCfg,
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
+    id="Cube-Mimic-VM-v0",
+    entry_point="isaaclab_mimic.envs:CubeMimicVMEnv",
+    kwargs={
+        "env_cfg_entry_point": cube_mimic_vm_env_cfg.CubeMimicVMEnvCfg,
     },
     disable_env_checker=True,
 )

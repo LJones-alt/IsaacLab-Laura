@@ -52,7 +52,7 @@ def object_reached_goal(
     des_pos_w, _ = combine_frame_transforms(robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], des_pos_b)
     # distance of the end-effector to the object: (num_envs,)
     distance = torch.norm(des_pos_w - object.data.root_pos_w[:, :3], dim=1)
-   # print(f"For DEBUG : DISTANCE TO GOAL : {distance}")
+    print(f"For DEBUG : DISTANCE TO GOAL : {distance}")
    # if(distance.item() < threshold):
   #      loghelper.logsubtask(LogType.FINISH)
     test = distance < threshold
@@ -160,6 +160,7 @@ def object_stacked(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = SceneEnti
     pos_diff = upper_object.data.root_pos_w - lower_object.data.root_pos_w
     height_dist = torch.linalg.vector_norm(pos_diff[:, 2:], dim=1)
     xy_dist = torch.linalg.vector_norm(pos_diff[:, :2], dim=1)
+    #print(f"For DEBUG : xy_dist : {xy_dist}, height_dist : {height_dist}")
     stacked = torch.logical_and(xy_dist < xy_threshold, (height_dist - height_diff) < height_threshold)
     # stacked = torch.logical_and(torch.isclose(robot.data.joint_pos[:, -1], 
     #     gripper_open_val.to(env.device), atol=1e-4, rtol=1e-4), stacked)
@@ -170,7 +171,7 @@ def object_stacked(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = SceneEnti
 
 def object_inserted_upright(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     upper_object_cfg: SceneEntityCfg = SceneEntityCfg("object"),lower_object_cfg: SceneEntityCfg = SceneEntityCfg("vialrack"),
-    xy_threshold: float = 0.01, height_threshold: float = 0.01, height_diff: float = 0.05,
+    xy_threshold: float = 0.01, height_threshold: float = 0.03, height_diff: float = 0.0,
     atol=0.0001,
     rtol=0.0001,
     upright_good_deg: float = 30.0, gripper_open_val: torch.Tensor = torch.tensor([0.04]), logging=False) -> torch.Tensor:
@@ -183,6 +184,7 @@ def object_inserted_upright(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = 
     upright_good = tilt_deg <= upright_good_deg
     stacked = object_stacked(env, robot_cfg, upper_object_cfg, lower_object_cfg,
         xy_threshold, height_threshold, height_diff, gripper_open_val)
+    #print(f"For DEBUG : STACKED STATUS : {stacked}")
     stacked_upright = stacked & upright_good
     gripper_joint_ids, _ = robot.find_joints(env.cfg.gripper_joint_names)
     stacked = torch.logical_and(
@@ -201,7 +203,7 @@ def object_inserted_upright(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = 
             atol=atol,
             rtol=rtol,
         ),
-        stacked,
+        stacked_upright,
     )
 
     #if logging:
@@ -210,4 +212,4 @@ def object_inserted_upright(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = 
         #if idx.numel() > 0:
         #    print(f"[stacked-upright tilt] n={int(idx.numel())} sample={tilt_deg[idx][:5].tolist()}")
 
-    return inserted
+    return stacked

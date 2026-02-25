@@ -246,7 +246,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
     certain_joint_positions = []
 
     ###### SET UP RECOVERY   ####
-    use_recovery=True
+    use_recovery=False
     recovery_activated_during_rollout = 0
     print("rollout recovery enabled ? : ", use_recovery)
     
@@ -259,7 +259,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
     max_recovery_steps = 500  # Safety limit for recovery mode
 
     ##### CONFIG RECOVERY CONTROLLER ####
-    backup_controller  = BackupController(env, device)
+    backup_controller  = BackupController(env, device, )
     state_guess = 0
     last_state = 0
     recovery_mode = False

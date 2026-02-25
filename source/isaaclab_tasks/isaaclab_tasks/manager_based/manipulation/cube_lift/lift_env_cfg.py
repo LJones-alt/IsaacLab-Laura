@@ -136,8 +136,8 @@ class ObservationsCfg():
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
         object_position = ObsTerm(func=mdp.object_position_in_robot_root_frame)
-        #target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})
-        target_object_position = ObsTerm(func=mdp.target_position, params={"object_cfg": SceneEntityCfg("scale")})
+        target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})
+        #target_object_position = ObsTerm(func=mdp.target_position, params={"object_cfg": SceneEntityCfg("scale")})
         actions = ObsTerm(func=mdp.last_action)
        # object_to_target = ObsTerm(func=mdp.object_near_goal)
         eef_pos = ObsTerm(func=mdp.ee_frame_pos)
@@ -182,14 +182,7 @@ class ObservationsCfg():
                 "object_cfg": SceneEntityCfg("object"),
             },
         )
-        stacked = ObsTerm(
-            func=mdp.object_stacked,
-            params={
-                "robot_cfg": SceneEntityCfg("robot"),
-                "upper_object_cfg": SceneEntityCfg("object"),
-                "lower_object_cfg": SceneEntityCfg("scale"),
-            },
-        )
+        
         # lift = ObsTerm(
         #     func=mdp.is_object_lifted,
         #     params={
@@ -197,13 +190,7 @@ class ObservationsCfg():
         #         "threshold" : 0.1
         #     }
         # )
-        # appr_goal = ObsTerm(
-        #     func=mdp.object_near_goal,
-        #     params={ 
-        #         "threshold": 0.05, 
-        #         "command_name": "object_pose",
-        #     },
-        # )
+        
         # release_object = ObsTerm(
         #     func=mdp.object_released,
         #     params={
@@ -233,16 +220,18 @@ class EventCfg:
     #     self.reset_all.params["loghelper"] = loghelper
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    reset_object_position = EventTerm(
-        func=mdp.reset_root_state_uniform,
-        mode="reset",
-        params={
-            "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.02, 0.05)},
-            "velocity_range": {},
-            "asset_cfg": SceneEntityCfg("object", body_names="Object"),
-        },
-    )
+    # reset_object_position = EventTerm(
+    #     func=mdp.reset_root_state_uniform,
+    #     mode="reset",
+    #     params={
+    #         "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.02, 0.05)},
+    #         "velocity_range": {},
+    #         "asset_cfg": SceneEntityCfg("object", body_names="Object"),
+    #     },
+    # )
     #randomises the scale of the object 
+
+    #set this to 1.0 for the vial! 
     randomise_object_scale = EventTerm(
         func=mdp.randomize_rigid_body_scale,
         mode="prestartup",
@@ -363,7 +352,7 @@ class CubeEnvCfg(ManagerBasedRLEnvCfg):
         # general settings
         
         self.decimation = 2
-        self.episode_length_s = 500
+        self.episode_length_s = 5000
         # simulation settings
         self.sim.dt = 0.01  # 100Hz
         self.sim.render_interval = self.decimation

@@ -76,11 +76,20 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
             scale=0.5,
             body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
         )
-        #self.terminations.success=DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
-
-        #self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}
-        #)
-       
+        self.terminations.success=DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
+        self.observations.policy.abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
+        self.observations.policy.object_knocked = ObsTerm(func=mdp.object_knocked)
+        self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15})
+        
+        self.observations.policy.target_object_position = ObsTerm(func=mdp.target_position, params={"object_cfg": SceneEntityCfg("scale")})
+        self.observations.subtask_terms.stacked = ObsTerm(
+            func=mdp.object_stacked,
+            params={
+                "robot_cfg": SceneEntityCfg("robot"),
+                "upper_object_cfg": SceneEntityCfg("object"),
+                "lower_object_cfg": SceneEntityCfg("scale"),
+            },
+        )
 
 
 @configclass

@@ -4,17 +4,24 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg, BinaryJointPositionActionCfg
 from isaaclab.envs.mdp.actions.binary_joint_actions import BinaryJointPositionAction
 from backup_controller import BackupControllerSM 
+from backup_controller_place import BackupControllerPlaceSM
+from backup_controller_insert import BackupControllerInsertSM
 import torch
 
 
 class BackupController:
-    def __init__(self,env, device):
+    def __init__(self,env, device, tasktype="lift"):
         self.env = env
         self.sim = env.unwrapped.sim
         self.num_envs = env.num_envs
         self.device = device
+        self.tasktype = tasktype
         self.rest_pos = self._get_rest_pos()
-        self.backup_controller = BackupControllerSM(0.01*2, self.num_envs,'cuda' , 0.02)
+        self.goal_quat = self._get_goal_pos()
+        self.object_goal_pos = self._get_goal_pos()
+        self.object_goal_rot = self._get_goal_rot()
+        self.object_start_pose = self._get_start_pos()
+        self.backup_controller = self._get_controller()#BackupControllerSM(0.01*2, self.num_envs,'cuda' , 0.02)
         self.robot = env.unwrapped.scene["robot"]
         self.robot_entity_cfg , self.ee_jacobi_idx = self._setup_robot()
         self.state_guess = 0
@@ -22,9 +29,49 @@ class BackupController:
         self.clamp = 0.05
         self.rot_gain = 1.0
         self.rot_clamp = 0.5
-        self.object_start_pose = self._get_start_pos()
-
+       
+        
         self.reset()
+
+    def _get_controller(self):
+        match self.tasktype:
+            case "lift":
+                return BackupControllerSM(0.01*2, self.num_envs,'cuda' , 0.02)
+            case "place":
+                print(f"[DEBUG] Using Place Backup Controller")
+                return BackupControllerPlaceSM(dt=0.01*2, num_envs=self.num_envs, position_threshold=0.02, device='cuda', offset = torch.tensor([[-0.1, 0, 0.1]], device='cuda:0'), goal_quat = self.object_goal_rot, goal_pos= self.object_goal_pos)
+            case "insert":
+                return BackupControllerInsertSM(0.01*2, self.num_envs,'cuda' , 0.02)
+            case _:
+                raise ValueError(f"Unknown task type {self.tasktype} for backup controller")
+
+    def _get_goal_pos(self):
+        match self.tasktype:
+            case "lift":
+                goal_rot = self.env.unwrapped.command_manager.get_command("object_pose")
+              #  print(f"[DEBUG] Getting goal quat for lift task {goal_rot}")
+                return self.env.unwrapped.command_manager.get_command("object_pose")
+            case "place":
+                goal_pos = self.env.unwrapped.scene["scale"].data.root_pose_w
+               # print(f"[DEBUG] Getting goal pos for place task {goal_pos}")
+                return self.env.unwrapped.scene["scale"].data.root_pose_w
+
+            case "insert":
+                return self.env.unwrapped.scene["vialrack"].data.root_pose_w
+
+    def _get_goal_rot(self):
+         match self.tasktype:
+            case "lift":
+                goal_rot = self.env.unwrapped.command_manager.get_command("object_pose")
+                print(f"[DEBUG] Getting goal quat for lift task {goal_rot}")
+                return self.env.unwrapped.command_manager.get_command("object_pose")
+            case "place":
+                goal_rot = self.env.unwrapped.command_manager.get_command("object_pose")
+                print(f"[DEBUG] Getting goal quat for place task {goal_rot}")
+                return self.env.unwrapped.command_manager.get_command("object_pose")
+
+            case "insert":
+                return self.env.unwrapped.scene["vialrack"].data.root_pose_w
 
     def reset(self):
         self.backup_controller.reset_idx()
@@ -32,6 +79,8 @@ class BackupController:
     def _get_start_pos(self):
         object_pose_w = self.env.unwrapped.scene["object"].data.root_pose_w
         return object_pose_w
+
+   
 
     def _get_rest_pos(self):
         rest_pos = torch.tensor([[0.5206, 0.0096, 0.3751]], device=self.device)
@@ -64,8 +113,9 @@ class BackupController:
             root_pose_w[:, 0:3], root_pose_w[:, 3:7],
             ee_pose_w[:, 0:3], ee_pose_w[:, 3:7]
         )
-        object_pose = self.env.unwrapped.command_manager.get_command("object_pose")
-        ee_recovery, gripper , state_guess= self.backup_controller.compute(ee_pose =ee_pose_w, start_object_pose = self.object_start_pose, current_object_pose=current_object_pose, final_object_pose=object_pose, rest_pose=self.rest_pos, sm_state=state_guess)
+
+        #object_pose = self.env.unwrapped.command_manager.get_command("object_pose")
+        ee_recovery, gripper , state_guess= self.backup_controller.compute(ee_pose =ee_pose_w, start_object_pose = self.object_start_pose, current_object_pose=current_object_pose, final_object_pose=self.object_goal_pos, rest_pose=self.rest_pos, sm_state=state_guess)
         #print(f"[BAKCUP] state {state_guess}")
         
         #return ee_recovery , gripper , state_guess

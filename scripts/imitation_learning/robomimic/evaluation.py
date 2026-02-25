@@ -42,7 +42,10 @@ def ensemble_uncertainty(ensemble, obs):
     max_action = torch.max(outputs, dim=0)
 
     std = torch.std(outputs, dim=0)
+
     variance = std.pow(2)
+    #print(f"ens variance : {variance}")
+    diff = 0
 
     # std per policy (overall std across joints for each policy's action)
     per_policy_std = torch.std(outputs, dim=1) 
@@ -57,7 +60,8 @@ def ensemble_uncertainty(ensemble, obs):
         'std': std,
         'variance': variance,
         'min_std_action': min_std_action,
-        'time_taken': time_taken
+        'time_taken': time_taken,
+        'diff': diff
     }
 
 def MC_dropout_uncertainty(policy, obs, niters=50):

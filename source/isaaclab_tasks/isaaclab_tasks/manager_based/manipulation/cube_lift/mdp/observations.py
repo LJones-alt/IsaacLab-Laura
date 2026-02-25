@@ -183,7 +183,7 @@ def gripper_pos(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = SceneEntityC
 def object_near_goal(
     env: ManagerBasedRLEnv,
     command_name: str = "object_pose",
-    threshold: float = 0.05,
+    threshold: float = 0.1,
     robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
   #  loghelper : LoggingHelper = LoggingHelper()
@@ -332,6 +332,14 @@ def target_pose(
     object_pos_w = object.data.root_pos_w[:, :3]  # (num_envs, 3)
     object_quat_w = object.data.root_quat_w  # (num_envs, 4) - already wxyz format
     return torch.cat([object_pos_w, object_quat_w], dim=-1)  # (num_envs, 7)
+
+def generated_command_position(
+    env: ManagerBasedRLEnv,
+    command_name: str
+) -> torch.Tensor:
+    """The generated command position (first 3 elements)."""
+    command = env.command_manager.get_command(command_name)
+    return command[:, :3]
 
 # def object_distance_to_goal(
 #     env: ManagerBasedRLEnv, 

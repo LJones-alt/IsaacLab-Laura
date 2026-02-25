@@ -6,8 +6,9 @@
 from isaaclab.envs.mimic_env_cfg import MimicEnvCfg, SubTaskConfig
 from isaaclab.utils import configclass
 
-from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_env_place import FrankaDevEnvCfg
-
+#from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_env_place import FrankaDevEnvCfg
+#from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_env_obs import FrankaDevEnvCfg
+from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_vial_insert import FrankaDevEnvCfg
 
 @configclass
 class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
@@ -116,7 +117,7 @@ class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
         #         # This is actually the lift 
         #         subtask_term_signal="appr_goal",
         #         # No time offsets for the final subtask
-        #         subtask_term_offset_range=(10, 20),
+        #         subtask_term_offset_range=(0,0),
         #         # Selection strategy for source subtask segment
         #         selection_strategy="nearest_neighbor_robot_distance",
         #         # Optional parameters for the selection strategy function

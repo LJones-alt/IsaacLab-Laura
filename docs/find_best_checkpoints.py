@@ -72,7 +72,7 @@ def main():
     """Main function to process all model directories."""
     # Define paths - handle both host and Docker container paths
     script_dir = Path(__file__).parent.resolve()
-    base_dir = script_dir / "place/Dev-IK-Rel-Place-v0"
+    base_dir = script_dir / "insert/Dev-IK-Rel-Insert-v0"
     output_dir = base_dir / "best_models"
     
     # Create output directory (including parent directories if needed)

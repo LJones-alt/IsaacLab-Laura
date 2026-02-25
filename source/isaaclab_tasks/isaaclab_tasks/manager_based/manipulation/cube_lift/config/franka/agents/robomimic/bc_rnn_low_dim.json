@@ -1,13 +1,13 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "bc_med_data_",
+        "name": "vial_insert",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": true,
             "log_tb": true,
             "log_wandb": true,
-            "wandb_proj_name": "pick_place_bc_rnn_0.5_mix"
+            "wandb_proj_name": "vial_insert"
         },
         "save": {
             "enabled": true,
@@ -20,7 +20,7 @@
         },
         "epoch_every_n_steps": 100,
         "validation_epoch_every_n_steps": 10,
-        "env": "Dev-IK-Rel-place-v0",
+        "env": "Dev-IK-Rel-Insert-v0",
         "additional_envs": null,
         "render": false,
         "render_video": true,
@@ -55,7 +55,7 @@
         "goal_mode": null,
         "cuda": true,
         "batch_size": 100,
-        "num_epochs": 1500,
+        "num_epochs": 1000,
         "seed": 101
     },
     "algo": {

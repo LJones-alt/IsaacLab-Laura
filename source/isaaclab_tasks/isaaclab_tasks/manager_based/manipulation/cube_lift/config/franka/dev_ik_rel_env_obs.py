@@ -8,9 +8,11 @@ from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsA
 from isaaclab.utils import configclass
 from isaaclab.assets import RigidObjectCfg, ArticulationCfg
 from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.managers import TerminationTermCfg as DoneTerm
 from . import dev_env_cfg
 import math
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab_assets.glassware.glassware import ChemistryGlassware
 from isaaclab_tasks.manager_based.manipulation.cube_lift import mdp
 ##
@@ -64,7 +66,15 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
             scale=0.5,
             body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
         )
-
+        self.observations.subtask_terms.appr_goal = ObsTerm(
+            func=mdp.object_near_goal,
+            params={ 
+                "threshold": 0.05, 
+                "command_name": "object_pose",
+            },
+        )
+        #self.observations.policy.target_object_position = ObsTerm(func=mdp.generated_command_position, params={"command_name": "object_pose"})
+        self.terminations.success = DoneTerm(func=mdp.object_near_goal, params={"threshold": 0.05 })  
 
        
 

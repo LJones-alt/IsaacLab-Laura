@@ -118,13 +118,13 @@ def rollout_ensemble(env, success_term, horizon, device):
     # Set up recovery controller 
     
     
-    backup_controller  = BackupController(env, device)
+    backup_controller  = BackupController(env, device, tasktype="lift")
     state_guess = 0
     for i in range(horizon):
         
         
         action, state_guess = backup_controller.get_controller_action(state_guess, 0)
-        print(f"state guess : {state_guess}")
+       # print(f"state guess : {state_guess}")
         
         zero_action = torch.zeros(1, env.action_space.shape[1], device=device)
         #print(f"\npassed this action {action}")

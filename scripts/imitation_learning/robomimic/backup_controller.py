@@ -226,7 +226,7 @@ def infer_state_machine(
         pose_pos = wp.transform_get_translation(final_object_pose[tid])
         pose_rot = wp.transform_get_rotation(final_object_pose[tid])
         # Apply offset in x-direction (5 cm = 0.05 m)
-        offset_pos = wp.vec3(pose_pos.x, pose_pos.y+0.1, pose_pos.z+0.02)
+        offset_pos = wp.vec3(pose_pos.x, pose_pos.y+0.1, pose_pos.z+0.01)
         des_ee_pose[tid] = wp.transform(offset_pos, pose_rot)
         gripper_state[tid] = GripperState.CLOSE
         # wait for a while
@@ -411,9 +411,10 @@ class BackupControllerSM:
             dist = np.linalg.norm(cur_pos - des_pos)
             # print(f"StateMachine debug state {debug_state}")
             # print(f"[Env {i}]")
+            # print(f" Goal pose : {final_object_pose}")
             # print(f"   Current -> pos: {cur_pos}, quat: {cur_quat}")
             # print(f"   Desired -> pos: {des_pos}, quat: {des_quat}")
-            #print(f"   Euclidean distance: {dist:.4f}")
+            # print(f"   Euclidean distance: {dist:.4f}")
         #print(f"returned state : {self.sm_state}")
         # convert transformations back to (w, x, y, z)
         des_ee_pose = self.des_ee_pose[:, [0, 1, 2, 6, 3, 4, 5]]

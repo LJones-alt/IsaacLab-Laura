@@ -89,6 +89,8 @@ def rollout(policy, env, success_term, horizon, device):
     """
     policy.start_episode()
     obs_dict, _ = env.reset()
+    print("[INFO] Policy expected obs keys:", policy)
+    
     traj = dict(actions=[], obs=[], next_obs=[])
 
     for i in range(horizon):

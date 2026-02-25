@@ -11,19 +11,26 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from source.isaaclab_assets.isaaclab_assets.robots.universal_robots import UR10_CFG
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR
+#from source.isaaclab_assets.isaaclab_assets.robots.universal_robots import UR10_CFG
+from isaaclab_assets.robots.universal_robots import UR10_CFG
 from . import dev_env_cfg
+import isaaclab.sim as sim_utils
+from isaaclab.sensors import CameraCfg
 import math
 from isaaclab.managers import SceneEntityCfg
 from isaaclab_assets.glassware.glassware import ChemistryGlassware
 from isaaclab_tasks.manager_based.manipulation.cube_lift import mdp
+from isaaclab_tasks.manager_based.manipulation.cube_lift.mdp import franka_stack_events
+
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 ##
 # Pre-defined configs
 ##
 from isaaclab_assets.robots.franka import FRANKA_PANDA_HIGH_PD_CFG  # isort: skip
 from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG
+
+## add some cameras in
 
 
 
@@ -32,25 +39,44 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
-        # get the vial from the stirplate and place in vial rack 
+        # put the beaker on the stir plate
         glassware = ChemistryGlassware()
-        self.scene.object=glassware.vial(pos=[0.5, 0.0, 0.02],name="Object")
         self.scene.stirplate = glassware.stirplate(pos=[0.5, 0.0, 0.01])
+        #self.scene.scale = glassware.scale(pos=[0.3, -0.3, 0.01])
+        self.scene.vialrack = glassware.line_vial_rack(pos=[0.3, -0.3, 0.0], scale=1.5)
+        self.scene.object = glassware.capped_vial(pos=[0.5, 0.0, 0.01], scale =1.0, name="object")
+        self.observations.policy.target_object_position = ObsTerm(func=mdp.target_position, params={"object_cfg": SceneEntityCfg("vialrack")})
+        
+        ### subtask 
+        self.observations.subtask_terms.stacked = ObsTerm(
+            func=mdp.object_stacked,
+            params={
+                "robot_cfg": SceneEntityCfg("robot"),
+                "upper_object_cfg": SceneEntityCfg("object"),
+                "lower_object_cfg": SceneEntityCfg("vialrack"),
+            },
+        )
 
-        self.scene.vialrack = glassware.vialrack(pos=[0.3, -0.3, 0.01])
-
+        self.events.randomise_object_scale= EventTerm(
+            func=mdp.randomize_rigid_body_scale,
+            mode="prestartup",
+            params={
+                "scale_range": {"x": (1.0, 1.0), "y": (1.0, 1.0), "z": (1.0, 1.0)},
+                "asset_cfg": SceneEntityCfg("object"),
+            },
+        )
         self.events.reset_object_position = EventTerm(
             func=mdp.reset_place_root_state_uniform,
             mode="reset",
             params={
                 "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.02, 0.02)},
                 "velocity_range": {},
-                "asset_cfg": SceneEntityCfg("object", body_names="Object"),
+                "asset_cfg": SceneEntityCfg("object"),
                 "asset2_cfg" : SceneEntityCfg("stirplate"),
-                "asset3_cfg" : SceneEntityCfg("scale")
-
+                "asset3_cfg" : SceneEntityCfg("vialrack")
             },
         )
+
         #self.scene.robot = UR10e_ROBOTIQ_GRIPPER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
@@ -78,10 +104,14 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
             scale=0.5,
             body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
         )
-        self.terminations.success=DoneTerm(func=mdp.object_inserted_upright, params={"lower_object_cfg": SceneEntityCfg("vialrack")})
 
-        #self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}
-        #)
+        self.terminations.success= DoneTerm(func=mdp.object_inserted_upright, params={"lower_object_cfg": SceneEntityCfg("vialrack")})
+
+        #self.terminations.success=DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
+
+        self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}
+        
+    )
        
 
 

@@ -120,7 +120,7 @@ def policy_from_checkpoint_v05(ckpt_path, device, verbose=True):
     from packaging import version
     
     # Check robomimic version
-    robomimic_version = getattr(robomimic, '__version__', '0.3.0')
+    robomimic_version = getattr(robomimic, '__version__', '0.5.0')
     
     if verbose:
         print(f"[INFO] Loading checkpoint with robomimic version {robomimic_version}")
@@ -324,7 +324,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
     obs_dict, _ = env.reset()
     traj = dict(actions=[], obs=[], next_obs=[], sub_obs=[], 
                 uncertainties=[], min_actions=[], max_actions=[],
-                time_taken=[], joint_pos=[], recovery=[], failure=[], grasp=[], appr=[])
+                time_taken=[], joint_pos=[], recovery=[], failure=[], grasp=[], appr=[], diff=[])
    
     ###### SETUP SWITCHING LOGIC ####
     switchingLogic = SwitchingLogic(parameters, horizon=horizon)
@@ -344,7 +344,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
     max_recovery_steps = 500  # Safety limit for recovery mode
 
     ##### CONFIG RECOVERY CONTROLLER ####
-    backup_controller  = BackupController(env, device)
+    backup_controller  = BackupController(env, device, tasktype="lift")
     state_guess = 0
     last_state = 0
     recovery_mode = False
@@ -386,24 +386,12 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
         # This prevents dimension mismatch errors when env has extra observations
         policy_obs = {k: obs[k] for k in TRAINED_OBS_KEYS if k in obs}
         
-        # Debug: print observation shapes on first iteration
-        if i == 0:
-            print(f"[DEBUG] Available obs keys: {list(obs.keys())}")
-            print(f"[DEBUG] Filtered policy_obs keys: {list(policy_obs.keys())}")
-            total_dim = 0
-            for k, v in policy_obs.items():
-                dim = v.shape[-1] if len(v.shape) > 0 else 1
-                print(f"[DEBUG]   {k}: shape={v.shape}, dim={dim}")
-                total_dim += dim
-            print(f"[DEBUG] Total dimension: {total_dim} (expected 44)")
-            missing = [k for k in TRAINED_OBS_KEYS if k not in obs]
-            if missing:
-                print(f"[DEBUG] MISSING keys: {missing}")
-        
         #### get policy action   ####
         metrics = ensemble_uncertainty(ensemble, policy_obs)
         uncertainty = metrics['variance']
+        #print(f"Uncdertainty : {uncertainty}")
         policy_actions = metrics['mean']
+        diff=metrics['diff']    
         
         # Robust state estimation based on actual observations
         is_grasping = bool(sub_obs['grasp'].item()) if sub_obs['grasp'].numel() == 1 else bool(torch.any(sub_obs['grasp']))
@@ -419,7 +407,8 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
             if state_guess >= 4 and state_guess < 7:  # Was in lift/move states
                 # Object dropped - need to re-approach
                 state_guess = 0  # Go back to REST to safely re-approach
-                print(f"[STATE] Reset to REST (grasp lost)")
+                #print(f"[STATE] Reset to REST (grasp lost), activating recovery")
+               # recovery_mode= True
                     
         sm_actions, state_guess = backup_controller.get_controller_action(state_guess, 0)
         if last_state != state_guess:
@@ -440,24 +429,25 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
                         print(f"[RECOVERY] Step {i} - Starting recovery from state {state_guess}")
             
         if recovery_mode:
+            #print(f"Recovery Actions")
             actions = sm_actions
             recovery_steps += 1
             
             # Exit recovery when task completes or after max steps
-            max_recovery_steps = 500
-            if state_guess == 7 or recovery_steps > max_recovery_steps:  # APPROACH_GOAL = 7
-                print(f"[RECOVERY] Completed after {recovery_steps} steps, state={state_guess}")
-                recovery_mode = False
-                recovery_cooldown_active = True
-                recovery_cooldown_timer = recovery_cooldown_duration
+            # max_recovery_steps = 500
+            # if recovery_steps > max_recovery_steps:  # APPROACH_GOAL = 7
+            #     print(f"[RECOVERY] Completed after {recovery_steps} steps, state={state_guess}")
+            #     recovery_mode = False
+            #     recovery_cooldown_active = True
+            #     recovery_cooldown_timer = recovery_cooldown_duration
         else:
             # Decrement cooldown when not in recovery
-            if recovery_cooldown_active:
-                recovery_cooldown_timer -= 1
-                if recovery_cooldown_timer <= 0:
-                    recovery_cooldown_active = False
-                    recovery_cooldown_timer = recovery_cooldown_duration 
-                    print("Recovery Cooldown Ended")
+            # if recovery_cooldown_active:
+            #     recovery_cooldown_timer -= 1
+            #     if recovery_cooldown_timer <= 0:
+            #         recovery_cooldown_active = False
+            #         recovery_cooldown_timer = recovery_cooldown_duration 
+            #         print("Recovery Cooldown Ended")
 
             actions = policy_actions
 
@@ -485,6 +475,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
         traj['time_taken'].append(metrics['time_taken'])
         traj['joint_pos'].append(obs['abs_joint_pos'])
         traj['recovery'].append(recovery)
+        traj['diff'].append(diff)
         if torch.any(obs['object_knocked']):
             print("[MONITOR] object knocked over")
             object_knocked = True
@@ -494,7 +485,8 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
             traj['failure'].append(" ")
             grasp = torch.any(sub_obs['grasp'])
             traj['grasp'].append(grasp.item())
-            appr = torch.any(sub_obs['stacked'])
+            #appr = torch.any(sub_obs['stacked'])
+            appr = torch.any(sub_obs['appr_goal'])
             traj['appr'].append(appr.item())
             print(f"grasp : {traj['grasp']}, appr : {traj['appr']}")
             # print(f"grasp : {grasp.item()}, appr : {appr.item()}")
@@ -503,7 +495,8 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
         elif terminated or truncated:
             grasp = torch.any(sub_obs['grasp'])
             traj['grasp'].append(grasp.item())
-            appr = torch.any(sub_obs['stacked'])
+            #appr = torch.any(sub_obs['stacked'])
+            appr = torch.any(sub_obs['appr_goal'])
             traj['appr'].append(appr.item())
             #print(f"grasp : {traj['grasp']}, appr : {traj['appr']}")
             if i==horizon:
@@ -519,7 +512,8 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters,  
     traj['failure'].append("timeout")
     grasp = torch.any(sub_obs['grasp'])
     traj['grasp'].append(grasp.item())
-    appr = torch.any(sub_obs['stacked'])
+    #appr = torch.any(sub_obs['stacked'])
+    appr = torch.any(sub_obs['appr_goal'])
     traj['appr'].append(appr.item())
     return False, traj, recovery_activated_during_rollout, ""
 
@@ -599,51 +593,56 @@ def main():
     # stack_cube_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/stack_cube_ensemble.txt')    
     
     #pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/ensembles.txt')
-    pick_place_ensemble = load_ensemble(device, ensemble_path='docs/place/Dev-IK-Rel-Place-v0/best_models/best_model_paths.txt')
+    #pick_place_ensemble = load_ensemble(device, ensemble_path='docs/place/low/Dev-IK-Rel-Place-v0/best_models/best_model_paths.txt')
     # pick_place_ensemble_30 = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/pick_place_ensemble_30_paths.txt')
- 
+   # pick_place_ensemble = load_ensemble(device, ensemble_path='docs/lift/Dev-IK-Rel-v1/best_models/best_model_paths.txt')
+    
+    pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/insert_paths.txt')
+    
     # Lets set these to the 0.99 confidence
     parameters = {
         'beaker_lift' :{
-           0 : {
-                "confidence_level": 0.018646507043923632,
-                "window_size": 15,
-                "max_peaks": 10
+            0 : {
+                "confidence_level": 0.0002104382060000009,
+                "window_size": 10,
+                "max_peaks": 8
             },
             1 : {
-                "confidence_level": 0.018898154803458085,
+                "confidence_level": 0.00020459246700000051,
                 "window_size": 10,
-                "max_peaks": 9
+                "max_peaks": 8
             },
             2 : {
-                "confidence_level": 0.017589774107725654,
-                "window_size": 15,
-                "max_peaks": 7
+                "confidence_level": 0.00023551160300000013,
+                "window_size": 10,
+                "max_peaks": 8
             },
             3 : {
-                "confidence_level": 0.02829341592326851,
-                "window_size": 12,
+                "confidence_level": 0.0003701742110000007,
+                "window_size": 10,
                 "max_peaks": 8
             },
             4 : {
-                "confidence_level": 0.029170220902127186,
-                "window_size": 15,
-                "max_peaks": 11
+                "confidence_level": 0.0002939644620000011,
+                "window_size": 10,
+                "max_peaks": 8
             },
             5 : {
-                "confidence_level": 0.017449474558650185,
-                "window_size": 12,
-                "max_peaks": 7
+                "confidence_level": 0.0006407762280000002,
+                "window_size": 10,
+                "max_peaks": 8
             },
             6 : {
-                "confidence_level": 0.6324478323150455,
-                "window_size": 14,
-                "max_peaks": 14
+                "confidence_level": 0.49527883679,
+                "window_size": 10,
+                "max_peaks": 8
             },
 
         },
     }
+    
 
+   
     model_arch = "BC_RNN_GMM"
     task = "pick_place" # stack_cube or pick_place
     model_name = f"ensemble"
@@ -756,6 +755,7 @@ def main():
     summary_text += f"Success rate: {results.count(True) / len(results)}\n"
     summary_text += f'Failed runs with no intervention : {sum(failed_no_intervention)}\n'
     summary_text += f"Intervention rate : {sum(intervention)/len(intervention)}. Of which success : {sum(intervention_success)}, of which failed {sum(intervention_failure)}\n"
+    summary_text += f"Intervention Results: {intervention}\n"
     summary_text += f"Number of times object knocked over : {knocked}\n"
     summary_text += f"Trial Results: {results}\n\n"
     summary_text += f"Environment random seed: {args_cli.seed}\n"

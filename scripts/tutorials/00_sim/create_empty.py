@@ -17,7 +17,7 @@
 
 import argparse
 
-from isaaclab.app import AppLauncher
+from source.isaaclab.isaaclab.app import AppLauncher
 
 # create argparser
 parser = argparse.ArgumentParser(description="Tutorial on creating an empty stage.")
