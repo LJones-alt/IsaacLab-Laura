@@ -118,7 +118,7 @@ def rollout_ensemble(env, success_term, horizon, device):
     # Set up recovery controller 
     
     
-    backup_controller  = BackupController(env, device, tasktype="lift")
+    backup_controller  = BackupController(env, device, tasktype="insert_top")
     state_guess = 0
     for i in range(horizon):
         

@@ -76,25 +76,25 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
                 "asset3_cfg" : SceneEntityCfg("vialrack")
             },
         )
-
+        self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         #self.scene.robot = UR10e_ROBOTIQ_GRIPPER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-        self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
-            prim_path="{ENV_REGEX_NS}/Robot",
-            init_state=ArticulationCfg.InitialStateCfg(
-                joint_pos={
+        # self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
+        #     prim_path="{ENV_REGEX_NS}/Robot",
+        #     init_state=ArticulationCfg.InitialStateCfg(
+        #         joint_pos={
                     
-                    "panda_joint1":  0.3281,
-                    "panda_joint2": -0.3684,   
-                    "panda_joint3":  -0.2787,
-                    "panda_joint4": -2.6138,  
-                    "panda_joint5":  -2.7527,
-                    "panda_joint6":  2.4991,  #  +90° → keeps hand level
-                    "panda_joint7":  0.3331,
-                    "panda_finger_joint1": 0.04,   # open gripper
-                    "panda_finger_joint2": 0.04,
-                }
-            ),
-        )
+        #             "panda_joint1":  0.3281,
+        #             "panda_joint2": -0.3684,   
+        #             "panda_joint3":  -0.2787,
+        #             "panda_joint4": -2.6138,  
+        #             "panda_joint5":  -2.7527,
+        #             "panda_joint6":  2.4991,  #  +90° → keeps hand level
+        #             "panda_joint7":  0.3331,
+        #             "panda_finger_joint1": 0.04,   # open gripper
+        #             "panda_finger_joint2": 0.04,
+        #         }
+        #     ),
+        # )
         # replace with relative position controller 
         self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
             asset_name="robot",
@@ -106,7 +106,7 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         )
 
         self.terminations.success= DoneTerm(func=mdp.object_inserted_upright, params={"lower_object_cfg": SceneEntityCfg("vialrack"), "upright_good_deg": 22.5})
-        self.terminations.object_tipped = DoneTerm(func=mdp.object_knocked, params={"max_tilt": 65})
+
         #self.terminations.success=DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
 
         self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}

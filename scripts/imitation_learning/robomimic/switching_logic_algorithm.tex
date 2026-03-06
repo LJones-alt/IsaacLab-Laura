@@ -1,0 +1,62 @@
+\begin{algorithm}[t]
+\caption{Uncertainty-Based Switching Logic for Safe Robot Manipulation}
+\label{alg:switching_logic}
+\begin{algorithmic}[1]
+\Procedure{SwitchingLogic}{$\text{uncertainties}, \text{step}, \text{parameters}$}
+    \State \textit{// Initialization}
+    \State $\text{counts} \gets 0$
+    \State $\text{triggered} \gets \text{False}$
+    
+    \State \textit{// Iterate over each joint/action dimension}
+    \For{$j = 0$ \textbf{to} $|\text{uncertainties}| - 1$}
+        \State $\text{unc} \gets \text{uncertainties}[j]$
+        \State $\text{traj}[j][\text{step}] \gets \text{unc}$
+        
+        \State \textit{// Check if sufficient history exists}
+        \If{$\text{step} > \text{parameters}[j][\text{window\_size}]$}
+            \State \textit{// Extract sliding window of recent uncertainties}
+            \State $\text{window\_start} \gets \text{step} - \text{parameters}[j][\text{window\_size}]$
+            \State $\text{test\_window} \gets \text{traj}[j][\text{window\_start} : \text{step}]$
+            
+            \State \textit{// Count peaks exceeding confidence threshold}
+            \State $\text{peaks} \gets 0$
+            \For{$x \in \text{test\_window}$}
+                \If{$x \geq \text{parameters}[j][\text{confidence\_level}]$}
+                    \State $\text{peaks} \gets \text{peaks} + 1$
+                \EndIf
+            \EndFor
+            
+            \State \textit{// Check if peaks exceed maximum allowed}
+            \If{$\text{peaks} \geq \text{parameters}[j][\text{max\_peaks}]$}
+                \State $\text{counts} \gets \text{counts} + 1$
+            \EndIf
+        \EndIf
+    \EndFor
+    
+    \State \textit{// Trigger safety mechanism if multiple joints show high uncertainty}
+    \If{$\text{counts} > 2$}
+        \If{\textbf{not} $\text{triggered}$}
+            \State $\text{triggered} \gets \text{True}$
+            \State \textbf{print} ``Uncertainty triggered safety condition''
+        \EndIf
+        \State \Return \textbf{True} \Comment{Switch to backup controller}
+    \EndIf
+    
+    \State \Return \textbf{False} \Comment{Continue with learned policy}
+\EndProcedure
+
+\State
+
+\Procedure{HalfwayCheck}{$\text{step}, \text{grasp\_state}, \text{horizon}$}
+    \State \textit{// Verify subtask completion at midpoint}
+    \If{$\text{step} = \lfloor \text{horizon} / 2 \rfloor$ \textbf{and not} $\text{grasp\_state}$}
+        \If{\textbf{not} $\text{triggered}$}
+            \State \textbf{print} ``Halfway point reached without subtask completion''
+            \State $\text{triggered} \gets \text{True}$
+        \EndIf
+        \State \Return \textbf{True} \Comment{Activate recovery}
+    \EndIf
+    \State \Return \textbf{False}
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}

@@ -7,7 +7,7 @@
             "terminal_output_to_txt": true,
             "log_tb": true,
             "log_wandb": true,
-            "wandb_proj_name": "vial_insert"
+            "wandb_proj_name": "vial_insert_1.0_mix"
         },
         "save": {
             "enabled": true,
@@ -55,7 +55,7 @@
         "goal_mode": null,
         "cuda": true,
         "batch_size": 100,
-        "num_epochs": 1000,
+        "num_epochs": 1500,
         "seed": 101
     },
     "algo": {

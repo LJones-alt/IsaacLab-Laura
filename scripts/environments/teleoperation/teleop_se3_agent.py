@@ -65,6 +65,12 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
 
+# # import rclpy
+# # from rclpy.node import Node
+# from std_msgs.msg import Float32MultiArray
+# from sensor_msgs.msg import JointState
+
+
 if args_cli.enable_pinocchio:
     import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 
@@ -238,6 +244,7 @@ def main() -> None:
                 if teleoperation_active:
                     # process actions
                     actions = action.repeat(env.num_envs, 1)
+                   # process_action(actions)
                     # apply actions
                     env.step(actions)
                 else:
@@ -254,6 +261,11 @@ def main() -> None:
     # close the simulator
     env.close()
     print("Environment closed")
+
+def process_action(action):
+    ## handler that will spit out ROS2 commands 
+
+    print(f"Teleop Actions : {action}")
 
 
 if __name__ == "__main__":

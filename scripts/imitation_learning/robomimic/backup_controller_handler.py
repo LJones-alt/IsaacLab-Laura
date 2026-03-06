@@ -6,6 +6,7 @@ from isaaclab.envs.mdp.actions.binary_joint_actions import BinaryJointPositionAc
 from backup_controller import BackupControllerSM 
 from backup_controller_place import BackupControllerPlaceSM
 from backup_controller_insert import BackupControllerInsertSM
+from backup_controller_insert_top import BackupControllerInsertTopSM
 import torch
 
 
@@ -41,7 +42,10 @@ class BackupController:
                 print(f"[DEBUG] Using Place Backup Controller")
                 return BackupControllerPlaceSM(dt=0.01*2, num_envs=self.num_envs, position_threshold=0.02, device='cuda', offset = torch.tensor([[-0.1, 0, 0.1]], device='cuda:0'), goal_quat = self.object_goal_rot, goal_pos= self.object_goal_pos)
             case "insert":
-                return BackupControllerInsertSM(0.01*2, self.num_envs,'cuda' , 0.02)
+                return BackupControllerInsertSM(dt=0.01*2, num_envs=self.num_envs, position_threshold=0.02, device='cuda', offset = torch.tensor([[-0.1, 0, 0.1]], device='cuda:0'), goal_quat = self.object_goal_rot, goal_pos= self.object_goal_pos)
+            case "insert_top":
+                ### check this quat
+                return BackupControllerInsertTopSM(dt=0.01*2, num_envs=self.num_envs, position_threshold=0.02, device='cuda', offset = torch.tensor([[-0.1, 0, 0.1]], device='cuda:0'), goal_quat = self.object_goal_rot, goal_pos= self.object_goal_pos)
             case _:
                 raise ValueError(f"Unknown task type {self.tasktype} for backup controller")
 
@@ -55,7 +59,9 @@ class BackupController:
                 goal_pos = self.env.unwrapped.scene["scale"].data.root_pose_w
                # print(f"[DEBUG] Getting goal pos for place task {goal_pos}")
                 return self.env.unwrapped.scene["scale"].data.root_pose_w
-
+            case "insert_top":
+                # still vial rack
+                return self.env.unwrapped.scene["vialrack"].data.root_pose_w
             case "insert":
                 return self.env.unwrapped.scene["vialrack"].data.root_pose_w
 
@@ -69,9 +75,20 @@ class BackupController:
                 goal_rot = self.env.unwrapped.command_manager.get_command("object_pose")
                 print(f"[DEBUG] Getting goal quat for place task {goal_rot}")
                 return self.env.unwrapped.command_manager.get_command("object_pose")
-
+            case "insert_top":
+                object_pos = self.env.unwrapped.scene["object"].data.root_pose_w
+                rest_rot = torch.tensor([[ 0, 1, 0, 0]], device=self.device)
+            
+                goal_rot = torch.cat([object_pos[:, :3],rest_rot], dim =-1)
+                example = self.env.unwrapped.command_manager.get_command("object_pose")
+                print(f"example {example}")
+                #goal_rot= self.env.unwrapped.scene["object"].data.root_com_pose_w
+                print(f"Goal rot  : {goal_rot}")
+                #goal_rot = torch.tensor([[0,1,0,0]], device=self.device)#self.env.unwrapped.command_manager.get_command("object_pose")
+                return goal_rot #self.env.unwrapped.command_manager.get_command("object_pose")
             case "insert":
-                return self.env.unwrapped.scene["vialrack"].data.root_pose_w
+                goal_rot = self.env.unwrapped.command_manager.get_command("object_pose")
+                return self.env.unwrapped.command_manager.get_command("object_pose")
 
     def reset(self):
         self.backup_controller.reset_idx()
@@ -89,9 +106,15 @@ class BackupController:
         # lets change this into the 6 element tensor they are expecting 
         roll,pitch,yaw = euler_xyz_from_quat(ee_recovery_rot)
         rest_pos = torch.cat([rest_pos, ee_recovery_rot], dim =-1)
+        
+        #print(f"rpy version :{torch.cat([rest_pos,roll.unsqueeze(0), pitch.unsqueeze(0), yaw.unsqueeze(0)], dim =-1)}")
+        if self.tasktype == "insert_top":
+            rest_pos = torch.tensor([[ 0.6226, -0.0621,  0.3555]], device=self.device)
+            rest_rot = torch.tensor([[ 0, 1, 0, 0]], device=self.device)
+            roll,pitch,yaw = euler_xyz_from_quat(rest_rot)
+            rest_pos = torch.cat([rest_pos,rest_rot], dim =-1)
         print(f"Rest pos {rest_pos}")
         print(f"rpy : {roll}, {pitch}, {yaw}")
-        #print(f"rpy version :{torch.cat([rest_pos,roll.unsqueeze(0), pitch.unsqueeze(0), yaw.unsqueeze(0)], dim =-1)}")
         return rest_pos
     
     def _setup_robot(self):

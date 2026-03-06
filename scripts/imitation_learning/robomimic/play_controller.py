@@ -118,7 +118,7 @@ def rollout_ensemble(env, success_term, horizon, device):
 
     ### SET USE RECOVERY TO FALSE   ####
     # Set up recovery controller 
-    backup_controller = BackupControllerSM(0.01*2, num_envs,'cuda' , 0.01)
+    backup_controller = BackupControllerInsertSM(0.01*2, num_envs,'cuda' , 0.01)
     backup_controller.reset_idx() # none so reset all 
 
     robot = env.unwrapped.scene["robot"]

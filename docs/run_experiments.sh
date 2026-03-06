@@ -2,29 +2,29 @@
 
 ## script to run experiments in the background 
 
-task="Dev-IK-Rel-v1"
-horizon=500
+task="Dev-IK-Rel-Insert-v0"
+horizon=2000
 num_rollouts=100
 run_file="scripts/imitation_learning/robomimic/play_ensemble_v05.py"
-exp_type="lift_none"
+exp_type="insert_recal_2k_0.9"
 
 ##### this now runs the experiments
 
-# ## ensemble 15
-# ensemble_size=15
-# seed=101
-# exp_name="${task}_ensemble_${ensemble_size}_seed_${seed}_${exp_type}"
-# ./isaaclab.sh -p $run_file --task $task --horizon $horizon --num_rollouts $num_rollouts --ensemble_size $ensemble_size --seed $seed --exp_name $exp_name --headless
+# # ## ensemble 15
+ensemble_size=15
+seed=101
+exp_name="${task}_ensemble_${ensemble_size}_seed_${seed}_${exp_type}"
+./isaaclab.sh -p $run_file --task $task --horizon $horizon --num_rollouts $num_rollouts --ensemble_size $ensemble_size --seed $seed --exp_name $exp_name --headless
 
-# seed=107
-# exp_name="${task}_ensemble_${ensemble_size}_seed_${seed}_${exp_type}"
-# ./isaaclab.sh -p $run_file --task $task --horizon $horizon --num_rollouts $num_rollouts --ensemble_size $ensemble_size --seed $seed --exp_name $exp_name --headless
+seed=107
+exp_name="${task}_ensemble_${ensemble_size}_seed_${seed}_${exp_type}"
+./isaaclab.sh -p $run_file --task $task --horizon $horizon --num_rollouts $num_rollouts --ensemble_size $ensemble_size --seed $seed --exp_name $exp_name --headless
 
-# seed=115
-# exp_name="${task}_ensemble_${ensemble_size}_seed_${seed}_${exp_type}"
-# ./isaaclab.sh -p $run_file --task $task --horizon $horizon --num_rollouts $num_rollouts --ensemble_size $ensemble_size --seed $seed --exp_name $exp_name --headless
+seed=115
+exp_name="${task}_ensemble_${ensemble_size}_seed_${seed}_${exp_type}"
+./isaaclab.sh -p $run_file --task $task --horizon $horizon --num_rollouts $num_rollouts --ensemble_size $ensemble_size --seed $seed --exp_name $exp_name --headless
 
-## ensemble 10
+# ## ensemble 10
 ensemble_size=10
 seed=101
 exp_name="${task}_ensemble_${ensemble_size}_seed_${seed}_${exp_type}"

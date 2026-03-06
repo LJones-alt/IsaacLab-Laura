@@ -34,7 +34,7 @@ def object_position_in_robot_root_frame(
     object_pos_b, _ = subtract_frame_transforms(
         robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], object_pos_w
     )
-   
+    #print(f"object position : {object_pos_b}")
     return object_pos_b
 
 def obstacle_position_in_robot_root_frame(
@@ -162,14 +162,14 @@ def is_object_lifted(
 def ee_frame_pos(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")) -> torch.Tensor:
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     ee_frame_pos = ee_frame.data.target_pos_w[:, 0, :] - env.scene.env_origins[:, 0:3]
-    #print(f"EE pos : {ee_frame_pos}")
+   # print(f"EE pos : {ee_frame_pos}")
     return ee_frame_pos
 
-
+##
 def ee_frame_quat(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")) -> torch.Tensor:
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     ee_frame_quat = ee_frame.data.target_quat_w[:, 0, :]
-    #print(f"EE quat : {ee_frame_quat}")
+  #  print(f"EE quat : {ee_frame_quat}")
     return ee_frame_quat
 
 
@@ -249,7 +249,7 @@ def robot_pose(
     robot_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ):
     robot: Articulation = env.scene[robot_cfg.name]
-   # print(robot.data.joint_pos)
+    print(f"robot data : {robot.data.joint_pos}")
     return torch.tensor([0.04])
 
 def position_command_error(
@@ -301,7 +301,7 @@ def object_tilt (env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = Scen
     #print("obs term : tilt : ", tilt_deg)
     return tilt_deg
 
-def object_knocked(env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = SceneEntityCfg("object"), max_tilt: float = 45):
+def object_knocked(env: ManagerBasedRLEnv, upper_object_cfg: SceneEntityCfg = SceneEntityCfg("object"), max_tilt: float = 90):
     object: RigidObject = env.scene[upper_object_cfg.name]
     tilt_deg = upright_tilt_deg(object.data.root_quat_w, object.data.default_root_state[:, 3:7])
     # Return a bool tensor with shape (num_envs,) for proper batching

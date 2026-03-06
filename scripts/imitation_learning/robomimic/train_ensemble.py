@@ -177,9 +177,9 @@ def train(config: Config, device: str, log_dirs: list[str], ckpt_dirs: list[str]
     env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=config.train.data)
     print(f"config.train.data: {config.train.data}")
     with config.values_unlocked():
-        config.train.data = [{'path': 'docs/place/glassware_insert_demos_generated_split.hdf5'}]
+        config.train.data = [{'path': 'docs/insert/glassware_insert_demos_top_generated_split.hdf5'}]
     ####### HARD CODED MAKE SURE THIS GETS UPDATED #########
-    config_list= [{'path': 'docs/place/glassware_insert_demos_generated_split.hdf5'}]
+    config_list= [{'path': 'docs/insert/glassware_insert_demos_top_generated_split.hdf5'}]
     print(f"config.train.data: {config.train.data}")
     # print(f"config_list: {config_list}")
     # if isinstance(config.train.data, str):

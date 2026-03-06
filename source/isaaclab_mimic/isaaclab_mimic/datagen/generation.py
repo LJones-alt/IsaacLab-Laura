@@ -123,9 +123,9 @@ def env_loop(
                 # print("*" * 50, "\033[K")
                 print(summary_text)
                 log_file = "docs/generation_log.txt"
-                # with open(log_file, 'a') as f:
-                #     f.write(summary_text)
-                #     f.write("\n" + "="*80 + "\n\n")
+                with open(log_file, 'w') as f:
+                    f.write(summary_text)
+                    f.write("\n" + "="*80 + "\n\n")
               
 
                 # termination condition is on enough successes if @guarantee_success or enough attempts otherwise

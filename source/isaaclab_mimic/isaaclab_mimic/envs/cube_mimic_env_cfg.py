@@ -8,7 +8,7 @@ from isaaclab.utils import configclass
 
 #from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_env_place import FrankaDevEnvCfg
 #from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_env_obs import FrankaDevEnvCfg
-from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_vial_insert import FrankaDevEnvCfg
+from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_vial_insert_top_down import FrankaDevEnvCfg
 
 @configclass
 class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):

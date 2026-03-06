@@ -124,7 +124,8 @@ def infer_state_machine(
         pose_pos = wp.transform_get_translation(current_object_pose[tid])
         pose_rot = wp.transform_get_rotation(goal_quat[tid])
         # Go to a safe height ABOVE the object (z + 0.15m) with x offset
-        safe_above_pos = wp.vec3(pose_pos.x, pose_pos.y+0.1, pose_pos.z + 0.20)
+        # left this in, but no offset due to new orientation
+        safe_above_pos = wp.vec3(pose_pos.x, pose_pos.y, pose_pos.z+0.15)
         des_ee_pose[tid] = wp.transform(safe_above_pos, pose_rot)
         gripper_state[tid] = GripperState.OPEN  # Open gripper in preparation
         if distance_below_threshold(
@@ -144,20 +145,16 @@ def infer_state_machine(
         pose_pos = wp.transform_get_translation(current_object_pose[tid])
         pose_rot = wp.transform_get_rotation(goal_quat[tid])
         # Apply offset in x-direction (5 cm = 0.05 m)
-        offset_pos = wp.vec3(pose_pos.x, pose_pos.y+0.1, pose_pos.z) #sample vial + 0.04
+        offset_pos = wp.vec3(pose_pos.x, pose_pos.y, pose_pos.z+0.12) #sample vial + 0.04
         des_ee_pose[tid] = wp.transform(offset_pos, pose_rot)
         gripper_state[tid] = GripperState.OPEN
         pos_ok = distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
             wp.transform_get_translation(des_ee_pose[tid]),
-            0.02,
+            0.01,
         )
-        rot_ok = rotation_within_threshold(
-            wp.transform_get_rotation(ee_pose[tid]),
-            wp.transform_get_rotation(goal_quat[tid]),
-            float(0.05),  # ~8.6 degrees tolerance
-        )
-        if pos_ok and rot_ok:
+        
+        if pos_ok:
             if sm_wait_time[tid] >= BackupSMWaitTime.APPROACH_OBJECT:
                 # move to next state and reset wait time
                 print("[SM_INFO] : Moving from APPR_OBJ to GRASP_OBJECT")
@@ -168,7 +165,7 @@ def infer_state_machine(
         pose_pos = wp.transform_get_translation(current_object_pose[tid])
         pose_rot = wp.transform_get_rotation(goal_quat[tid])
         # Stay at the approach position while closing gripper
-        offset_pos = wp.vec3(pose_pos.x, pose_pos.y+0.1, pose_pos.z)
+        offset_pos = wp.vec3(pose_pos.x, pose_pos.y, pose_pos.z+0.12)
         des_ee_pose[tid] = wp.transform(offset_pos, pose_rot)
         gripper_state[tid] = GripperState.CLOSE
         # wait for a while
@@ -184,7 +181,7 @@ def infer_state_machine(
         pose_pos = wp.transform_get_translation(current_object_pose[tid])
         pose_rot = wp.transform_get_rotation(goal_quat[tid])
         # Apply offset in x-direction (5 cm = 0.05 m)
-        offset_pos = wp.vec3(pose_pos.x, pose_pos.y+0.1, 0.25) #sample vial + 0.04
+        offset_pos = wp.vec3(pose_pos.x, pose_pos.y, 0.25) #sample vial + 0.04
         des_ee_pose[tid] = wp.transform(offset_pos, pose_rot)
         gripper_state[tid] = GripperState.CLOSE
         # wait for a while
@@ -223,7 +220,7 @@ def infer_state_machine(
         #print("[SM] Approach above goal")
         offset_pos = wp.transform_get_translation(final_object_pose[tid])
         offset_rot = wp.transform_get_rotation(goal_quat[tid])
-        safe_above_pos = wp.vec3(offset_pos.x, offset_pos.y + 0.1, offset_pos.z + 0.25)
+        safe_above_pos = wp.vec3(offset_pos.x, offset_pos.y, offset_pos.z+0.25)
         #offset_pos = wp.vec3(offset_pos.x, offset_pos.y, offset_pos.z)  # raise 25 cm 
         above_target_pose = wp.transform(safe_above_pos, offset_rot)
         #above_target_pose = wp.transform_multiply(new_offset, final_object_pose[tid])
@@ -248,7 +245,7 @@ def infer_state_machine(
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
             wp.transform_get_translation(des_ee_pose[tid]), 
-            0.02):
+            0.01):
             if sm_wait_time[tid] >= BackupSMWaitTime.APPROACH_ABOVE_GOAL:
                 print("[SM_INFO] : Moving from APPR_ABOVE to APPROACH_GOAL")
                 sm_state[tid] = BackupSM.APPROACH_GOAL
@@ -259,14 +256,15 @@ def infer_state_machine(
         pose_pos = wp.transform_get_translation(final_object_pose[tid])
         pose_rot = wp.transform_get_rotation(goal_quat[tid])
         # Apply offset in x-direction (5 cm = 0.05 m)
-        offset_pos = wp.vec3(pose_pos.x, pose_pos.y+0.1, pose_pos.z+0.07)
+        # tune the z offset here ?
+        offset_pos = wp.vec3(pose_pos.x, pose_pos.y, pose_pos.z+0.15)
         des_ee_pose[tid] = wp.transform(offset_pos, pose_rot)
         gripper_state[tid] = GripperState.CLOSE
         # wait for a while
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
             wp.transform_get_translation(des_ee_pose[tid]),
-            0.02,
+            0.01,
         ):
             if sm_wait_time[tid] >= BackupSMWaitTime.APPROACH_GOAL:
                 # move to next state and reset wait time
@@ -278,7 +276,7 @@ def infer_state_machine(
         pose_pos = wp.transform_get_translation(final_object_pose[tid])
         pose_rot = wp.transform_get_rotation(goal_quat[tid])
         # Stay at the approach position while closing gripper
-        offset_pos = wp.vec3(pose_pos.x , pose_pos.y + 0.1, pose_pos.z+0.01)
+        offset_pos = wp.vec3(pose_pos.x , pose_pos.y, pose_pos.z+0.15)
         des_ee_pose[tid] = wp.transform(offset_pos, pose_rot)
         gripper_state[tid] = GripperState.OPEN
         # wait for a while
@@ -296,7 +294,7 @@ def infer_state_machine(
 
 
 
-class BackupControllerInsertSM:
+class BackupControllerInsertTopSM:
     def __init__(self, dt: float, num_envs: int, device: torch.device | str = "cpu", position_threshold=0.02, offset = torch.tensor([[-0.1, 0, 0.1]], device='cuda:0'), goal_quat = torch.tensor([[0, 0, 0, 0,0,0,0]], device='cuda:0'), goal_pos = torch.tensor([[0, 0, 0, 0,0,0,0]], device='cuda:0')):
         """Initialize the state machine.
 
@@ -464,13 +462,13 @@ class BackupControllerInsertSM:
             goal_quat = goal_quat_debug[i][3:]
             # compute Euclidean distance with numpy
             dist = np.linalg.norm(cur_pos - des_pos)
-            # print(f"StateMachine debug state {debug_state}")
-        #     # print(f"[Env {i}]")
-        #     print(f" Goal pose : {final_object_pose}")
-        #     print(f"   Current -> pos: {cur_pos}, quat: {cur_quat}")
-        #     print(f"   Desired -> pos: {des_pos}, quat: {des_quat}")
-        #     print(f"   Goal quat -> : {goal_quat}")
-        #     print(f"   Euclidean distance: {dist:.4f}")
+            print(f"StateMachine debug state {debug_state}")
+            # print(f"[Env {i}]")
+            print(f" Goal pose : {final_object_pose}")
+            print(f"   Current -> pos: {cur_pos}, quat: {cur_quat}")
+            print(f"   Desired -> pos: {des_pos}, quat: {des_quat}")
+            print(f"   Goal quat -> : {goal_quat}")
+            print(f"   Euclidean distance: {dist:.4f}")
         # #print(f"returned state : {self.sm_state}")
         # convert transformations back to (w, x, y, z)
         des_ee_pose = self.des_ee_pose[:, [0, 1, 2, 6, 3, 4, 5]]
