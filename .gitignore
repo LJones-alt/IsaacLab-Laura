@@ -39,6 +39,7 @@ docker/.container.cfg
 # Don't ignore the top-level .vscode directory as it is
 # used to configure VS Code settings
 !.vscode
+**/.vscode/*.db*
 
 # Outputs
 **/output/*
@@ -77,3 +78,62 @@ tests/
 
 # Docker history
 .isaac-lab-docker-history
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model0/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model1/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model10/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model11/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model12/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model13/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model14/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model2/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model3/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model4/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model5/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model6/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model7/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model8/vial_insert/20260218174413/config.json
+docs/insert/2k/Dev-IK-Rel-Insert-v0/model9/vial_insert/20260218174413/config.json
+docs/insert/4k/model0/config.json
+docs/insert/4k/model1/config.json
+docs/insert/4k/model10/config.json
+docs/insert/4k/model11/config.json
+docs/insert/4k/model12/config.json
+docs/insert/4k/model13/config.json
+docs/insert/4k/model14/config.json
+docs/insert/4k/model2/config.json
+docs/insert/4k/model3/config.json
+docs/insert/4k/model4/config.json
+docs/insert/4k/model5/config.json
+docs/insert/4k/model6/config.json
+docs/insert/4k/model7/config.json
+docs/insert/4k/model8/config.json
+docs/insert/4k/model9/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model0/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model1/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model10/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model11/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model12/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model13/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model14/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model2/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model3/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model4/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model5/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model6/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model7/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model8/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0/model9/vial_insert/20260217091333/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model0/vial_insert/20260216134802/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model1/vial_insert/20260216134805/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model10/vial_insert/20260216134809/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model11/vial_insert/20260216134809/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model12/vial_insert/20260216134810/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model13/vial_insert/20260216134810/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model14/vial_insert/20260216134810/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model2/vial_insert/20260216134806/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model3/vial_insert/20260216134806/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model4/vial_insert/20260216134806/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model6/vial_insert/20260216134807/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model7/vial_insert/20260216134808/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model8/vial_insert/20260216134808/config.json
+docs/insert/Dev-IK-Rel-Insert-v0_old/model9/vial_insert/20260216134808/config.json

@@ -264,7 +264,7 @@ def infer_state_machine(
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
             wp.transform_get_translation(des_ee_pose[tid]),
-            0.01,
+            0.014,
         ):
             if sm_wait_time[tid] >= BackupSMWaitTime.APPROACH_GOAL:
                 # move to next state and reset wait time
@@ -462,13 +462,13 @@ class BackupControllerInsertTopSM:
             goal_quat = goal_quat_debug[i][3:]
             # compute Euclidean distance with numpy
             dist = np.linalg.norm(cur_pos - des_pos)
-            print(f"StateMachine debug state {debug_state}")
-            # print(f"[Env {i}]")
-            print(f" Goal pose : {final_object_pose}")
-            print(f"   Current -> pos: {cur_pos}, quat: {cur_quat}")
-            print(f"   Desired -> pos: {des_pos}, quat: {des_quat}")
-            print(f"   Goal quat -> : {goal_quat}")
-            print(f"   Euclidean distance: {dist:.4f}")
+            # print(f"StateMachine debug state {debug_state}")
+            # # print(f"[Env {i}]")
+            # print(f" Goal pose : {final_object_pose}")
+            # print(f"   Current -> pos: {cur_pos}, quat: {cur_quat}")
+            # print(f"   Desired -> pos: {des_pos}, quat: {des_quat}")
+            # print(f"   Goal quat -> : {goal_quat}")
+            # print(f"   Euclidean distance: {dist:.4f}")
         # #print(f"returned state : {self.sm_state}")
         # convert transformations back to (w, x, y, z)
         des_ee_pose = self.des_ee_pose[:, [0, 1, 2, 6, 3, 4, 5]]

@@ -106,7 +106,7 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         )
 
         self.terminations.success= DoneTerm(func=mdp.object_inserted_upright, params={"lower_object_cfg": SceneEntityCfg("vialrack"), "upright_good_deg": 22.5})
-
+        self.terminations.object_tipped = DoneTerm(func=mdp.object_knocked, params={"max_tilt": 65})
         #self.terminations.success=DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
 
         self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}

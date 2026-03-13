@@ -98,7 +98,7 @@ class CommandsCfg:
         debug_vis=True,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
           #  pos_x=(0.3,0.3), pos_y=(-0.28, -0.28), pos_z=(0.1, 0.1), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
-            pos_x=(0.4,0.4), pos_y=(-0.3, -0.3), pos_z=(0.08, 0.08), roll=(math.pi/2, math.pi/2), pitch=(math.pi/2,math.pi/2), yaw=(0.0, 0.0)
+            pos_x=(0.4,0.4), pos_y=(-0.3, -0.3), pos_z=(0.11, 0.11), roll=(math.pi/2, math.pi/2), pitch=(math.pi/2,math.pi/2), yaw=(0.0, 0.0)
         ),
     )
 
@@ -356,8 +356,8 @@ class CubeEnvCfg(ManagerBasedRLEnvCfg):
         # simulation settings
         self.sim.dt = 0.01  # 100Hz
         self.sim.render_interval = self.decimation
-        self.viewer.eye = (1.0, 1.0, 1.0)
-        self.viewer.lookat = (0.0, 0.0, -0.1)
+        self.viewer.eye = (2.5, 0.5, 0.5)
+        self.viewer.lookat = (0.0, 0.0, 0.0)
       #  self.terminations.set_loghelper(self.loghelper)
         #self.events.set_loghelper(self.loghelper)
        # self.observations.policy.set_loghelper(self.loghelper)

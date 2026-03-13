@@ -65,14 +65,91 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
 
-# # import rclpy
-# # from rclpy.node import Node
-# from std_msgs.msg import Float32MultiArray
-# from sensor_msgs.msg import JointState
+# --- UDP Bridge imports ---
+import socket
+import json
+import time
+import numpy as np
 
+class BridgeClient:
+    def __init__(self, port=5005):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.addr = ('127.0.0.1', port)
+        self.sock.settimeout(0.5)
+        self._last_print_time = 0
 
-if args_cli.enable_pinocchio:
-    import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
+    def publish_command(self, actions):
+        """Publish 7-DOF Cartesian target: [x, y, z, qx, qy, qz, qw]"""
+        if hasattr(actions, 'cpu'):
+            act_list = actions.cpu().numpy().flatten().tolist()
+        else:
+            act_list = np.array(actions).flatten().tolist()
+        
+        if len(act_list) < 7: return
+        
+        payload = {'type': 'cartesian', 'data': act_list[:7]}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+        
+        # Throttled debug print (every 1 second)
+        curr_time = time.time()
+        if curr_time - self._last_print_time > 1.0:
+            print(f"DEBUG: Sent Cartesian to Bridge: {act_list}")
+            self._last_print_time = curr_time
+
+    def publish_joints(self, positions):
+        """Publish 7-DOF Joint positions"""
+        if hasattr(positions, 'cpu'):
+            pos_list = positions.cpu().numpy().flatten().tolist()
+        else:
+            pos_list = np.array(positions).flatten().tolist()
+        
+        if len(pos_list) < 7: return
+        
+        payload = {'type': 'joint', 'data': pos_list[:7]}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+
+        # Throttled debug print (every 1s)
+        curr_time = time.time()
+        if curr_time - self._last_print_time > 1.0:
+            print(f"DEBUG: Sent Joint Target to Bridge: {[round(p, 3) for p in pos_list[:7]]}")
+            self._last_print_time = curr_time
+
+    def open_gripper(self):
+        print("DEBUG: Sending Open Gripper to Bridge")
+        payload = {'type': 'gripper', 'width': 0.08}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+
+    def close_gripper(self):
+        print("DEBUG: Sending Close Gripper to Bridge")
+        payload = {'type': 'gripper', 'width': 0.0}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+
+    def get_robot_state(self):
+        payload = {'type': 'query'}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+        try:
+            data, _ = self.sock.recvfrom(2048)
+            return json.loads(data.decode())
+        except socket.timeout:
+            return None
+
+    def init_real(self, sim_pose):
+        print("[INFO] Initializing real robot synchronization via bridge...")
+        self.publish_command(sim_pose)
+        target_pos = np.array(sim_pose[:3])
+        
+        while True:
+            state = self.get_robot_state()
+            if state and state.get('real_pose'):
+                real_pos = np.array(state['real_pose']['pos'])
+                dist = np.linalg.norm(target_pos - real_pos)
+                print(f"[INFO] Distance to target: {dist:.4f}m")
+                if dist < 0.05:
+                    print("[INFO] Real robot synchronized with simulation!")
+                    break
+            else:
+                print("[INFO] Waiting for bridge on 127.0.0.1:5005...")
+            time.sleep(0.5)
 
 
 def main() -> None:
@@ -85,6 +162,9 @@ def main() -> None:
     Returns:
         None
     """
+    # Initialize UDP Bridge Client
+    bridge = BridgeClient()
+
     # parse configuration
     env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs)
     env_cfg.env_name = args_cli.task
@@ -229,6 +309,31 @@ def main() -> None:
     # reset environment
     env.reset()
     teleop_interface.reset()
+    prev_gripper_action = None
+
+    # Sync real robot with simulation initial pose
+    if bridge is not None:
+        # Get simulated robot initial EE pose
+        try:
+            # We use the observation manager to get the tracked end-effector pose
+            # Based on your environment info, these keys are available in the 'policy' group
+            obs_dict = env.observation_manager.compute_group("policy")
+            
+            # eef_pos is (num_envs, 3), eef_quat is (num_envs, 4)
+            eef_pos = obs_dict["eef_pos"][0].cpu().numpy()
+            eef_quat = obs_dict["eef_quat"][0].cpu().numpy() # [qw, qx, qy, qz]
+            
+            # ROS expects [qx, qy, qz, qw], Isaac uses [qw, qx, qy, qz]
+            sim_init_pose = [
+                float(eef_pos[0]), float(eef_pos[1]), float(eef_pos[2]),
+                float(eef_quat[1]), float(eef_quat[2]), float(eef_quat[3]), float(eef_quat[0])
+            ]
+            sim_pose = [0.5208, 0.0096, 0.3751, 0.0360, 0.7414, -0.0706, 0.6663]
+            print(f"Simulated robot initial pose: {sim_init_pose}")
+            # bridge.init_real(sim_init_pose)
+        except Exception as e:
+            print(f"[WARN] Could not retrieve sim initial pose from observations: {e}")
+            print("[INFO] Skipping real robot synchronization.")
 
     print("Teleoperation started. Press 'R' to reset the environment.")
 
@@ -243,9 +348,48 @@ def main() -> None:
                 # Only apply teleop commands when active
                 if teleoperation_active:
                     # process actions
-                    actions = action.repeat(env.num_envs, 1)
-                   # process_action(actions)
-                    # apply actions
+                    actions = action.repeat(env.num_envs, 1).to(env.device)
+
+                    # Compute absolute pose for the ROS bridge
+                    with torch.no_grad():
+                        # Get latest observations from the 'policy' group
+                        obs_dict = env.observation_manager.compute_group("policy")
+                        eef_pos = obs_dict["eef_pos"] # (num_envs, 3)
+                        eef_quat = obs_dict["eef_quat"] # (num_envs, 4) -> [qw, qx, qy, qz]
+
+                        # Calculate absolute target for bridge (current + delta)
+                        # actions[:, 0:3] is the position delta
+                        abs_pos = eef_pos + actions[:, 0:3]
+                        
+                        # For orientation, we map Isaac [qw, qx, qy, qz] to ROS [qx, qy, qz, qw]
+                        # and keep the current orientation (or integrate if needed, but simple is better)
+                        abs_quat_ros = torch.cat([eef_quat[:, 1:], eef_quat[:, 0:1]], dim=-1)
+                        
+                        # Construct a 7-DOF absolute pose [x, y, z, qx, qy, qz, qw]
+                        abs_pose_bridge = torch.cat([abs_pos, abs_quat_ros], dim=-1)
+                        print(f"absolute pose: {eef_pos}, {eef_quat}")
+                        print(f"absolute pose action: {abs_pose_bridge}")
+                    # ROS 2 Synchronization via Bridge
+                    if bridge is not None:
+                        # Send absolute pose to bridge
+                        bridge.publish_command(abs_pose_bridge[0])
+                        
+                        # Send joint positions for MoveIt 2
+                        obs_dict_full = env.observation_manager.compute_group("policy")
+                        if "joint_pos" in obs_dict_full:
+                            bridge.publish_joints(obs_dict_full["joint_pos"][0])
+
+                        # Handle gripper toggling
+                        curr_gripper = float(actions[0, -1])
+                        if prev_gripper_action is not None:
+                            if curr_gripper != prev_gripper_action:
+                                if curr_gripper > 0:
+                                    bridge.open_gripper()
+                                else:
+                                    bridge.close_gripper()
+                        prev_gripper_action = curr_gripper
+
+                    # apply actions (relative as intended by the environment)
                     env.step(actions)
                 else:
                     env.sim.render()
@@ -259,6 +403,8 @@ def main() -> None:
             break
 
     # close the simulator
+    env.close()
+        
     env.close()
     print("Environment closed")
 

@@ -30,9 +30,11 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         # put the beaker on the stir plate
         glassware = ChemistryGlassware()
         self.scene.stirplate = glassware.stirplate(pos=[0.5, 0.0, 0.01])
+        self.scene.goal_plate_pos = glassware.scale(pos=[0.4, -0.3, 0.01])
         self.events.reset_object_position = EventTerm(
             func=mdp.reset_multiple_root_state_uniform,
             mode="reset",
+            #[0.54, -0.3, 0.0]
             params={
                 "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.02, 0.02)},
                 "velocity_range": {},

@@ -1,27 +1,49 @@
 <?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    FastDDS config for multi-machine ROS2 over Tailscale VPN.
+    Machine B (this machine) communicates with Machine A at 100.71.76.112.
 
-<license>Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto.  Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.</license>
-
-
-<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles" >
+    Key changes vs default:
+      - Binds to tailscale0 interface only (avoids LAN multicast leaking)
+      - Disables multicast (not supported over Tailscale VPN)
+      - Adds Machine A's Tailscale IP as an explicit unicast discovery peer
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
     <transport_descriptors>
         <transport_descriptor>
-            <transport_id>UdpTransport</transport_id>
+            <transport_id>TailscaleUDP</transport_id>
             <type>UDPv4</type>
+            <!-- Bind only to the Tailscale interface -->
+            <interfaceWhiteList>
+                <address>100.107.19.48</address>
+            </interfaceWhiteList>
         </transport_descriptor>
     </transport_descriptors>
 
-    <participant profile_name="udp_transport_profile" is_default_profile="true">
+    <participant profile_name="tailscale_profile" is_default_profile="true">
         <rtps>
             <userTransports>
-                <transport_id>UdpTransport</transport_id>
+                <transport_id>TailscaleUDP</transport_id>
             </userTransports>
             <useBuiltinTransports>false</useBuiltinTransports>
+            <!-- Unicast discovery: point directly at Machine A's Tailscale IP -->
+            <builtin>
+                <metatrafficUnicastLocatorList>
+                    <locator>
+                        <udpv4>
+                            <address>100.71.76.112</address>
+                        </udpv4>
+                    </locator>
+                </metatrafficUnicastLocatorList>
+                <initialPeersList>
+                    <locator>
+                        <udpv4>
+                            <address>100.71.76.112</address>
+                        </udpv4>
+                    </locator>
+                </initialPeersList>
+                <avoid_builtin_multicast>true</avoid_builtin_multicast>
+            </builtin>
         </rtps>
     </participant>
 </profiles>

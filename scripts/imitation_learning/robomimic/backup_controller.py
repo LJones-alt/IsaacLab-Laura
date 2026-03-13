@@ -75,7 +75,7 @@ def infer_state_machine(
         rest_rot = wp.transform_get_rotation(rest_ee_pose[tid])
         
         # If we're below safe height, first move up
-        safe_height = 0.35  # Safe z-height to avoid collisions
+        safe_height = 0.15  # Safe z-height to avoid collisions
         if current_ee_pos.z < safe_height:
             # Lift straight up first
             lift_pos = wp.vec3(current_ee_pos.x, current_ee_pos.y, safe_height)

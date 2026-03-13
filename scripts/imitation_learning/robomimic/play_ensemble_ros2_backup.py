@@ -235,12 +235,13 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
     ## do setup
     print("running rollout number : ", rollout_num)
     # Initialize UDP Bridge Client
-   
+    bridge = BridgeClient()
+    
 
     for policy in ensemble:
         policy.start_episode()
     obs_dict, _ = env.reset()
-    #print("obs_dict keys : ", obs_dict.keys())
+    print("obs_dict keys : ", obs_dict.keys())
     traj = dict(actions=[], obs=[], next_obs=[], sub_obs=[], 
                 uncertainties=[], min_actions=[], max_actions=[],
                 time_taken=[], joint_pos=[], recovery=[], failure=[], grasp=[], appr=[], diff=[])
@@ -250,8 +251,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
     certain_joint_positions = []
 
     ###### SET UP RECOVERY   ####
-    use_recovery=False
-
+    use_recovery=True
     recovery_activated_during_rollout = 0
     print("rollout recovery enabled ? : ", use_recovery)
     
@@ -264,7 +264,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
     max_recovery_steps = 500  # Safety limit for recovery mode
 
     ##### CONFIG RECOVERY CONTROLLER ####
-    backup_controller  = BackupController(env, device, tasktype="lift")
+    backup_controller  = BackupController(env, device, tasktype="insert_top")
     state_guess = 0
     last_state = 0
     recovery_mode = False
@@ -272,21 +272,39 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
 
     prev_actions = None # hold previous action
     prev_gripper_action = None
+
+    default_quat = torch.tensor([[0.65538, -0.32298, 0.6574, -0.18433]], device=device) #xyzw
     # Define the observation keys the trained model expects
     # These must match the keys used during training (from shape_metadata)
     TRAINED_OBS_KEYS = ['eef_pos', 'eef_quat', 'gripper_pos', 'joint_pos', 'joint_vel', 
                         'object_position', 'target_object_position', 'actions']
     
     print(f'Running for horizon {horizon}')
-    summary_text = f"\nSetting for {rollout_num} \n"
-    summary_text += f"Stirplate : {env.unwrapped.scene['stirplate'].data.root_pose_w}  \ngoal : {env.unwrapped.command_manager.get_command('object_pose')}"
-     # Write to file
-    
-
-    
+    # print(f"Syncing robot to simulation...")
+    # if bridge is not None:
+    #     # Get simulated robot initial EE pose
+    #     try:
+    #         # We use the observation manager to get the tracked end-effector pose
+    #         # Based on your environment info, these keys are available in the 'policy' group
+    #         init_obs = obs_dict["policy"]
+    #         
+    #         # eef_pos is (num_envs, 3), eef_quat is (num_envs, 4)
+    #         eef_pos = init_obs["eef_pos"][0].cpu().numpy()
+    #         eef_quat = init_obs["eef_quat"][0].cpu().numpy() # [qw, qx, qy, qz]
+    #     
+    #         # ROS expects [qx, qy, qz, qw], Isaac uses [qw, qx, qy, qz]
+    #         sim_init_pose = [
+    #             float(eef_pos[0]), float(eef_pos[1]), float(eef_pos[2]),
+    #             float(eef_quat[1]), float(eef_quat[2]), float(eef_quat[3]), float(eef_quat[0])
+    #         ]
+    #         print(f"Simulated robot initial pose: {sim_init_pose}")
+    #        # bridge.init_real(sim_init_pose)
+    #     except Exception as e:
+    #         print(f"[WARN] Could not retrieve sim initial pose from observations: {e}")
+    #         print("[INFO] Skipping real robot synchronization.")
     for i in range(horizon):
         # Prepare observations
-        #print("obs_dict keys : ", obs_dict.keys())
+        print("obs_dict keys : ", obs_dict.keys())
         obs = copy.deepcopy(obs_dict["policy"])
         sub_obs = copy.deepcopy(obs_dict["subtask_terms"])
        
@@ -310,7 +328,15 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
                     image = image.clip(0.0, 1.0)
                     obs[image_name] = image
         # eef_pos is (num_envs, 3), eef_quat is (num_envs, 4)
-       
+        eef_pos = obs["eef_pos"].cpu().numpy()
+        eef_quat = obs["eef_quat"].cpu().numpy() # [qw, qx, qy, qz]
+        
+        # ROS expects [qx, qy, qz, qw], Isaac uses [qw, qx, qy, qz]
+        sim_init_pose = [
+            float(eef_pos[0]), float(eef_pos[1]), float(eef_pos[2]),
+            float(eef_quat[1]), float(eef_quat[2]), float(eef_quat[3]), float(eef_quat[0])
+        ]
+        print(f"Simulated robot pose: {sim_init_pose}")
         
         # Filter observations to only include keys the model was trained with
         # This prevents dimension mismatch errors when env has extra observations
@@ -388,7 +414,7 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
                 ) / 2 + args_cli.norm_factor_min
             actions = actions.to(device=device).view(1, env.action_space.shape[1])
         
-      
+        print(f"absolute pose: {sim_init_pose}")
         # Apply actions
         obs_dict, _, terminated, truncated, _ = env.step(actions)
         recovery.append(recovery_mode)
@@ -397,7 +423,42 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
         sub_obs = obs_dict["subtask_terms"]
 
         # Compute absolute pose for the ROS bridge
-        
+        with torch.no_grad():
+            # Get latest observations from the 'policy' group
+            #obs_dct = env.observation_manager.compute_group("policy")
+            eef_pos = obs["eef_pos"] # (num_envs, 3)
+            eef_quat = obs["eef_quat"] # (num_envs, 4) -> [qw, qx, qy, qz]
+
+            # Calculate absolute target for bridge (current + delta)
+            # actions[:, 0:3] is the position delta
+            abs_pos = eef_pos + actions[:, 0:3]
+            
+            # For orientation, we map Isaac [qw, qx, qy, qz] to ROS [qx, qy, qz, qw]
+            # and keep the current orientation (or integrate if needed, but simple is better)
+            abs_quat_ros = torch.cat([eef_quat[:, 1:], eef_quat[:, 0:1]], dim=-1)
+            #abs_quat_ros = default_quat
+            # Construct a 7-DOF absolute pose [x, y, z, qx, qy, qz, qw]
+            abs_pose_bridge = torch.cat([abs_pos, abs_quat_ros], dim=-1)
+            
+            print(f"absolute pose action: {abs_pose_bridge}")
+        # ROS 2 Synchronization via Bridge
+        if bridge is not None:
+
+            print(f"Trying to publish...")
+            # Send absolute pose to bridge
+            bridge.publish_command(abs_pose_bridge[0])
+            
+            # Handle gripper toggling
+            curr_gripper = float(actions[0, -1])
+            if prev_gripper_action is not None:
+                if curr_gripper != prev_gripper_action:
+                    if curr_gripper > 0:
+                        bridge.open_gripper()
+                    else:
+                        bridge.close_gripper()
+            prev_gripper_action = curr_gripper
+            # Slow down the loop to ~1Hz
+            time.sleep(10.0)
 
         # Record trajectory
         traj["actions"].append(actions.tolist())
@@ -423,13 +484,6 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
             traj['appr'].append(appr.item())
             print(f"grasp : {traj['grasp']}, appr : {traj['appr']}")
             # print(f"grasp : {grasp.item()}, appr : {appr.item()}")
-            summary_text += f"\nRecovery : {recovery_activated_during_rollout}"
-            summary_text += f"Result : success \n \n "
-            setting_file = "docs/ensemble_run_setup.txt"
-            with open(setting_file, 'a') as f:
-                f.write(summary_text)
-                f.write("\n" + "="*80 + "\n\n")
-            print(f"Results appended to: {setting_file}")
             return True, traj, recovery_activated_during_rollout, ""
         
         elif terminated or truncated:
@@ -443,31 +497,15 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
                 #if the failure was caused by object collision
                 traj['failure'].append("timeout")
                 failure_reason = "timeout"
-                summary_text += f"\nRecovery : {recovery_activated_during_rollout}"
-                summary_text += f"Result : timeout \n \n "
             else:
                 #if failure due to timeout, record timeout
                 traj['failure'].append("knocked")
                 failure_reason = "object_knocked"
-                summary_text += f"\nRecovery : {recovery_activated_during_rollout}"
-                summary_text += f"Result : hit\n \n "
-            
-            setting_file = "docs/ensemble_run_setup.txt"
-            with open(setting_file, 'a') as f:
-                f.write(summary_text)
-                f.write("\n" + "="*80 + "\n\n")
-            print(f"Results appended to: {setting_file}")
             return False, traj, recovery_activated_during_rollout, failure_reason
         prev_actions = actions
+        
+        
     #print("REcovery : ", traj["recovery"])
-    
-    summary_text += f"\nRecovery : {recovery_activated_during_rollout}"
-    summary_text += f"Result : failed, timeout \n \n "
-    setting_file = "docs/ensemble_run_setup.txt"
-    with open(setting_file, 'a') as f:
-        f.write(summary_text)
-        f.write("\n" + "="*80 + "\n\n")
-    print(f"Results appended to: {setting_file}")
     traj['failure'].append("timeout")
     grasp = torch.any(sub_obs['grasp'])
     traj['grasp'].append(grasp.item())
@@ -509,6 +547,68 @@ def clear_files(*paths : str):
                 exit()
             
 
+class BridgeClient:
+    def __init__(self, port=5005):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.addr = ('127.0.0.1', port)
+        self.sock.settimeout(0.5)
+        self._last_print_time = 0
+
+    def publish_command(self, actions):
+        """Publish 7-DOF Cartesian target: [x, y, z, qx, qy, qz, qw]"""
+        if hasattr(actions, 'cpu'):
+            act_list = actions.cpu().numpy().flatten().tolist()
+        else:
+            act_list = np.array(actions).flatten().tolist()
+        
+        if len(act_list) < 7: return
+        
+        payload = {'type': 'cartesian', 'data': act_list[:7]}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+        
+        # Throttled debug print (every 1 second)
+        curr_time = time.time()
+        if curr_time - self._last_print_time > 1.0:
+            print(f"DEBUG: Sent Cartesian to Bridge: {act_list}")
+            self._last_print_time = curr_time
+
+    def open_gripper(self):
+        print("DEBUG: Sending Open Gripper to Bridge")
+        payload = {'type': 'gripper', 'width': 0.08}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+
+    def close_gripper(self):
+        print("DEBUG: Sending Close Gripper to Bridge")
+        payload = {'type': 'gripper', 'width': 0.0}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+
+    def get_robot_state(self):
+        payload = {'type': 'query'}
+        self.sock.sendto(json.dumps(payload).encode(), self.addr)
+        try:
+            data, _ = self.sock.recvfrom(2048)
+            return json.loads(data.decode())
+        except socket.timeout:
+            return None
+
+    def init_real(self, sim_pose):
+        print("[INFO] Initializing real robot synchronization via bridge...")
+        self.publish_command(sim_pose)
+        target_pos = np.array(sim_pose[:3])
+        
+        while True:
+            state = self.get_robot_state()
+            if state and state.get('real_pose'):
+                real_pos = np.array(state['real_pose']['pos'])
+                dist = np.linalg.norm(target_pos - real_pos)
+                print(f"[INFO] Distance to target: {dist:.4f}m")
+                if dist < 0.05:
+                    print("[INFO] Real robot synchronized with simulation!")
+                    break
+            else:
+                print("[INFO] Waiting for bridge on 127.0.0.1:5005...")
+            time.sleep(0.5)
+                
 
 def main():
     """Run a trained policy from robomimic with Isaac Lab environment."""
@@ -554,10 +654,10 @@ def main():
     #pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/ensembles.txt')
     #pick_place_ensemble = load_ensemble(device, ensemble_path='docs/place/low/Dev-IK-Rel-Place-v0/best_models/best_model_paths.txt')
     # pick_place_ensemble_30 = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/pick_place_ensemble_30_paths.txt')
-    pick_place_ensemble = load_ensemble(device, ensemble_path='docs/lift/Dev-IK-Rel-v1/best_models/best_model_paths.txt')
+   # pick_place_ensemble = load_ensemble(device, ensemble_path='docs/lift/Dev-IK-Rel-v1/best_models/best_model_paths.txt')
     
     # pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/insert_paths.txt')
-  #  pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/inser_top_paths.txt')
+    pick_place_ensemble = load_ensemble(device, ensemble_path='scripts/imitation_learning/robomimic/inser_top_paths.txt')
     
     # Lets set these to the 0.99 confidence
     parameters = {
@@ -637,6 +737,44 @@ def main():
                 "window_size": 9,
                 "max_peaks": 8
             },
+
+        },
+        'force_backup': {
+            0 : {
+                "confidence_level": 0.0,
+                "window_size": 9,
+                "max_peaks": 8
+            },
+            1 : {
+                "confidence_level": 0.00,
+                "window_size": 9,
+                "max_peaks": 8
+            },
+            2 : {
+                "confidence_level": 0.000,
+                "window_size": 9,
+                "max_peaks": 8
+            },
+            3 : {
+                "confidence_level": 0.00,
+                "window_size": 9,
+                "max_peaks": 8
+            },
+            4 : {
+                "confidence_level": 0.000,
+                "window_size": 9,
+                "max_peaks": 8
+            },
+            5 : {
+                "confidence_level": 0.00,
+                "window_size": 9,
+                "max_peaks": 8
+            },
+            6 : {
+                "confidence_level": 0.0,
+                "window_size": 9,
+                "max_peaks": 8
+            },
         }
     }
     
@@ -683,7 +821,7 @@ def main():
     for trial in range(args_cli.num_rollouts):
         print(f"[INFO] Starting trial {trial}")
 
-        terminated, traj, recovery_activated_during_rollout, failure = rollout_ensemble(pick_place_ensemble[:args_cli.ensemble_size], env, success_term, args_cli.horizon, device, parameters['vial_insert'], use_recovery=args_cli.use_recovery, rollout_num=trial)
+        terminated, traj, recovery_activated_during_rollout, failure = rollout_ensemble(pick_place_ensemble[:args_cli.ensemble_size], env, success_term, args_cli.horizon, device, parameters['force_backup'], use_recovery=args_cli.use_recovery, rollout_num=trial)
         # save the uncertainties
         print("Finished rollout, recovery needed : ", recovery_activated_during_rollout)
         #print("actions shape : ", traj['actions'])
@@ -769,6 +907,12 @@ def main():
         f.write("\n" + "="*80 + "\n\n")
     print(f"Results appended to: {results_file}")
 
+    if franka_gripper is not None:
+        franka_gripper.destroy_node()
+    if franka_arm is not None:
+        franka_arm.destroy_node()
+    if rclpy.ok():
+        rclpy.shutdown()
     env.close()
 
 
