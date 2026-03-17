@@ -294,7 +294,7 @@ class TerminationsCfg:
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
 
-    #joint_violation = DoneTerm(func=mdp.joint_pos_out_of_limit)
+    joint_violation = DoneTerm(func=mdp.joint_pos_out_of_limit)
     
     #object_orientation = DoneTerm(func=mdp.bad_orientation)
 
@@ -356,8 +356,8 @@ class CubeEnvCfg(ManagerBasedRLEnvCfg):
         # simulation settings
         self.sim.dt = 0.01  # 100Hz
         self.sim.render_interval = self.decimation
-        self.viewer.eye = (2.5, 0.5, 0.5)
-        self.viewer.lookat = (0.0, 0.0, 0.0)
+        self.viewer.eye = (2.5, 0.5, 0.9)
+        self.viewer.lookat = (0.0, 0.0, 0.2)
       #  self.terminations.set_loghelper(self.loghelper)
         #self.events.set_loghelper(self.loghelper)
        # self.observations.policy.set_loghelper(self.loghelper)

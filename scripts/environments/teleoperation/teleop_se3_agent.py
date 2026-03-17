@@ -311,29 +311,29 @@ def main() -> None:
     teleop_interface.reset()
     prev_gripper_action = None
 
-    # Sync real robot with simulation initial pose
-    if bridge is not None:
-        # Get simulated robot initial EE pose
-        try:
-            # We use the observation manager to get the tracked end-effector pose
-            # Based on your environment info, these keys are available in the 'policy' group
-            obs_dict = env.observation_manager.compute_group("policy")
+    # # Sync real robot with simulation initial pose
+    # if bridge is not None:
+    #     # Get simulated robot initial EE pose
+    #     try:
+    #         # We use the observation manager to get the tracked end-effector pose
+    #         # Based on your environment info, these keys are available in the 'policy' group
+    #         obs_dict = env.observation_manager.compute_group("policy")
             
-            # eef_pos is (num_envs, 3), eef_quat is (num_envs, 4)
-            eef_pos = obs_dict["eef_pos"][0].cpu().numpy()
-            eef_quat = obs_dict["eef_quat"][0].cpu().numpy() # [qw, qx, qy, qz]
+    #         # eef_pos is (num_envs, 3), eef_quat is (num_envs, 4)
+    #         eef_pos = obs_dict["eef_pos"][0].cpu().numpy()
+    #         eef_quat = obs_dict["eef_quat"][0].cpu().numpy() # [qw, qx, qy, qz]
             
-            # ROS expects [qx, qy, qz, qw], Isaac uses [qw, qx, qy, qz]
-            sim_init_pose = [
-                float(eef_pos[0]), float(eef_pos[1]), float(eef_pos[2]),
-                float(eef_quat[1]), float(eef_quat[2]), float(eef_quat[3]), float(eef_quat[0])
-            ]
-            sim_pose = [0.5208, 0.0096, 0.3751, 0.0360, 0.7414, -0.0706, 0.6663]
-            print(f"Simulated robot initial pose: {sim_init_pose}")
-            # bridge.init_real(sim_init_pose)
-        except Exception as e:
-            print(f"[WARN] Could not retrieve sim initial pose from observations: {e}")
-            print("[INFO] Skipping real robot synchronization.")
+    #         # ROS expects [qx, qy, qz, qw], Isaac uses [qw, qx, qy, qz]
+    #         sim_init_pose = [
+    #             float(eef_pos[0]), float(eef_pos[1]), float(eef_pos[2]),
+    #             float(eef_quat[1]), float(eef_quat[2]), float(eef_quat[3]), float(eef_quat[0])
+    #         ]
+    #         sim_pose = [0.5208, 0.0096, 0.3751, 0.0360, 0.7414, -0.0706, 0.6663]
+    #         print(f"Simulated robot initial pose: {sim_init_pose}")
+    #         # bridge.init_real(sim_init_pose)
+    #     except Exception as e:
+    #         print(f"[WARN] Could not retrieve sim initial pose from observations: {e}")
+    #         print("[INFO] Skipping real robot synchronization.")
 
     print("Teleoperation started. Press 'R' to reset the environment.")
 
@@ -351,7 +351,7 @@ def main() -> None:
                     actions = action.repeat(env.num_envs, 1).to(env.device)
 
                     # Compute absolute pose for the ROS bridge
-                    with torch.no_grad():
+                    """ with torch.no_grad():
                         # Get latest observations from the 'policy' group
                         obs_dict = env.observation_manager.compute_group("policy")
                         eef_pos = obs_dict["eef_pos"] # (num_envs, 3)
@@ -369,25 +369,25 @@ def main() -> None:
                         abs_pose_bridge = torch.cat([abs_pos, abs_quat_ros], dim=-1)
                         print(f"absolute pose: {eef_pos}, {eef_quat}")
                         print(f"absolute pose action: {abs_pose_bridge}")
-                    # ROS 2 Synchronization via Bridge
-                    if bridge is not None:
-                        # Send absolute pose to bridge
-                        bridge.publish_command(abs_pose_bridge[0])
+                    # # ROS 2 Synchronization via Bridge """
+                    # if bridge is not None:
+                    #     # Send absolute pose to bridge
+                    #     bridge.publish_command(abs_pose_bridge[0])
                         
-                        # Send joint positions for MoveIt 2
-                        obs_dict_full = env.observation_manager.compute_group("policy")
-                        if "joint_pos" in obs_dict_full:
-                            bridge.publish_joints(obs_dict_full["joint_pos"][0])
+                    #     # Send joint positions for MoveIt 2
+                    #     obs_dict_full = env.observation_manager.compute_group("policy")
+                    #     if "joint_pos" in obs_dict_full:
+                    #         bridge.publish_joints(obs_dict_full["joint_pos"][0])
 
-                        # Handle gripper toggling
-                        curr_gripper = float(actions[0, -1])
-                        if prev_gripper_action is not None:
-                            if curr_gripper != prev_gripper_action:
-                                if curr_gripper > 0:
-                                    bridge.open_gripper()
-                                else:
-                                    bridge.close_gripper()
-                        prev_gripper_action = curr_gripper
+                    #     # Handle gripper toggling
+                    #     curr_gripper = float(actions[0, -1])
+                    #     if prev_gripper_action is not None:
+                    #         if curr_gripper != prev_gripper_action:
+                    #             if curr_gripper > 0:
+                    #                 bridge.open_gripper()
+                    #             else:
+                    #                 bridge.close_gripper()
+                    #     prev_gripper_action = curr_gripper
 
                     # apply actions (relative as intended by the environment)
                     env.step(actions)
