@@ -12,7 +12,6 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-#from source.isaaclab_assets.isaaclab_assets.robots.universal_robots import UR10_CFG
 from . import dev_env_cfg
 import math
 from isaaclab.managers import SceneEntityCfg

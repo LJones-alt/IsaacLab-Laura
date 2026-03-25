@@ -294,7 +294,7 @@ class TerminationsCfg:
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
 
-    joint_violation = DoneTerm(func=mdp.joint_pos_out_of_limit)
+    #joint_violation = DoneTerm(func=mdp.joint_pos_out_of_limit)
     
     #object_orientation = DoneTerm(func=mdp.bad_orientation)
 

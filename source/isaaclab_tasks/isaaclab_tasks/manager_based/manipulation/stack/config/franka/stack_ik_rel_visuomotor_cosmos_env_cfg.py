@@ -44,7 +44,10 @@ class ObservationsCfg:
         )
         table_cam_normals = ObsTerm(
             func=mdp.image,
-            params={"sensor_cfg": SceneEntityCfg("table_cam"), "data_type": "normals", "normalize": True},
+            params={
+                "sensor_cfg": SceneEntityCfg("table_cam"), 
+                "data_type": "normals", 
+                "normalize": True},
         )
         table_cam_depth = ObsTerm(
             func=mdp.image,

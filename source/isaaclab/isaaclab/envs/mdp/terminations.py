@@ -89,6 +89,8 @@ def joint_pos_out_of_limit(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = S
     limits = asset.data.soft_joint_pos_limits[:, asset_cfg.joint_ids]
     out_of_upper_limits = torch.any(asset.data.joint_pos[:, asset_cfg.joint_ids] > limits[..., 1], dim=1)
     out_of_lower_limits = torch.any(asset.data.joint_pos[:, asset_cfg.joint_ids] < limits[..., 0], dim=1)
+    if torch.any(out_of_upper_limits | out_of_lower_limits):
+        print("Joint position out of limit", asset.data.joint_pos[:, asset_cfg.joint_ids])
     return torch.logical_or(out_of_upper_limits, out_of_lower_limits)
 
 

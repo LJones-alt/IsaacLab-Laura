@@ -12,7 +12,7 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR
-from source.isaaclab_assets.isaaclab_assets.robots.universal_robots import UR10_CFG
+from isaaclab_assets.robots.universal_robots import UR10_CFG
 from . import dev_env_cfg
 import isaaclab.sim as sim_utils
 from isaaclab.sensors import CameraCfg
@@ -27,11 +27,11 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 # Pre-defined configs
 ##
 from isaaclab_assets.robots.franka import FRANKA_PANDA_HIGH_PD_CFG  # isort: skip
-from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG
+#from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG
 
 ## add some cameras in
 
-
+## this is fully configured for cosmos now! 
 
 @configclass
 class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
@@ -70,12 +70,15 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         self.scene.table_cam = CameraCfg(
             prim_path="{ENV_REGEX_NS}/table_cam",
             update_period=0.0,
-            height=84,
-            width=84,
-            data_types=["rgb", "distance_to_image_plane"],
+            height=200,
+            width=200,
+            data_types=["rgb", "semantic_segmentation", "normals","distance_to_image_plane"],
+            colorize_semantic_segmentation=True,
+            semantic_segmentation_mapping=SEMANTIC_MAPPING,
             spawn=sim_utils.PinholeCameraCfg(
                 focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 2)
             ),
+            ### Where is this in the scene?
             offset=CameraCfg.OffsetCfg(
                 pos=(1.0, 0.0, 0.4), rot=(0.35355, -0.61237, -0.61237, 0.35355), convention="ros"
             ),
@@ -154,6 +157,37 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         self.observations.policy.table_cam = ObsTerm(
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("table_cam"), "data_type": "rgb", "normalize": False}
         )
+
+        #### for cosmos add the segmentation, normals and depth data
+        self.observations.table_cam_segmentation= ObsTerm(
+            func = mdp.image,
+            params = {
+                "sensor_cfg": SceneEntityCfg("table_cam"),
+                "data_type": "semantic_segmentation",
+                "normalize" : True,
+            }
+        )
+
+        self.observations.table_cam_normals= ObsTerm(
+            func=mdp.image,
+            params={
+                "sensor_cfg": SceneEntityCfg("table_cam"),
+                "data_type" : "normals",
+                "normalize" : True,
+            }
+        )
+
+        self.observations.table_cam_depth = ObsTerm(
+            func=mdp.image,
+            params={
+                "sensor_cfg": SceneEntityCfg("table_cam"),
+                "data_type": "distance_to_image_plane",
+                "normalize" : True,
+            }
+        )
+
+        ## wrist cam? do we have one? 
+
         self.observations.policy.wrist_cam = ObsTerm(
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("wrist_cam"), "data_type": "rgb", "normalize": False}
         )
