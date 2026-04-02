@@ -71,6 +71,7 @@ from collections import OrderedDict
 from torch.utils.data import DataLoader
 
 import psutil
+import wandb
 
 # Robomimic imports
 import robomimic.utils.env_utils as EnvUtils
@@ -240,6 +241,12 @@ def train(config: Config, device: str, log_dir: str, ckpt_dir: str, video_dir: s
         config.algo.optim_params[k]["num_epochs"] = config.train.num_epochs
 
     # setup for a new training run
+    wand_experiment_name = f"{config.experiment.name}"
+    run=wandb.init(
+        project=config.experiment.logging.wandb_proj_name,
+        name=wand_experiment_name
+    )
+
     data_logger = DataLogger(
         log_dir,
         config=config,
@@ -377,6 +384,7 @@ def train(config: Config, device: str, log_dir: str, ckpt_dir: str, video_dir: s
 
     # terminate logging
     data_logger.close()
+    run.finish()
 
 
 def main(args: argparse.Namespace):
@@ -418,11 +426,16 @@ def main(args: argparse.Namespace):
     if args.name is not None:
         config.experiment.name = args.name
 
+    # little fix for WANDB
+    for stream in (sys.stdout, sys.stderr):
+        if not hasattr(stream, "isatty"):
+            stream.isatty = lambda: False
+
     if args.epochs is not None:
         config.train.num_epochs = args.epochs
 
     # change location of experiment directory
-    config.train.output_dir = os.path.abspath(os.path.join("./logs", args.log_dir, args.task))
+    config.train.output_dir = os.path.abspath(os.path.join("/docs", args.log_dir, args.task))
 
     # robomimic v0.5+ returns 4 values: log_dir, output_dir, video_dir, time_dir
     log_dir, ckpt_dir, video_dir, _ = TrainUtils.get_exp_dir(config)

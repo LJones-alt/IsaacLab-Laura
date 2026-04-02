@@ -38,7 +38,22 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
+        import carb
+        from isaacsim.core.utils.carb import set_carb_setting
 
+        carb_setting = carb.settings.get_settings()
+        set_carb_setting(carb_setting, "/rtx/domeLight/upperLowerStrategy", 4)
+
+        SEMANTIC_MAPPING = {
+            "class:object": (120, 230, 255, 255),
+            "class:stirplate": (255, 36, 66, 255),
+            "class:scale": (55, 255, 139, 255),
+            "class:table": (255, 237, 218, 255),
+            "class:ground": (100, 100, 100, 255),
+            "class:robot": (204, 110, 248, 255),
+            "class:UNLABELLED": (150, 150, 150, 255),
+            "class:BACKGROUND": (200, 200, 200, 255),
+        }
         
         # put the beaker on the stir plate
         glassware = ChemistryGlassware()
@@ -72,7 +87,7 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
             update_period=0.0,
             height=200,
             width=200,
-            data_types=["rgb", "semantic_segmentation", "normals","distance_to_image_plane"],
+            data_types=["rgb", "semantic_segmentation", "normals", "distance_to_image_plane"],
             colorize_semantic_segmentation=True,
             semantic_segmentation_mapping=SEMANTIC_MAPPING,
             spawn=sim_utils.PinholeCameraCfg(
@@ -225,7 +240,7 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
 
         #self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}
         #)
-       
+        ## lets also set up the subtasks -  cosmos seems to be more picky
 
 
 @configclass

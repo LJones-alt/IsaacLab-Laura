@@ -110,10 +110,10 @@ services:
     entrypoint: bash
     stdin_open: true
     tty: true
-    devices:
-    - /dev/hidraw0:/dev/hidraw0
-    - /dev/hidraw1:/dev/hidraw1
-    - /dev/hidraw2:/dev/hidraw2
+    # devices:
+    # - /dev/hidraw0:/dev/hidraw0
+    # - /dev/hidraw1:/dev/hidraw1
+    # - /dev/hidraw2:/dev/hidraw2
 
   # This service adds a ROS2 Humble
   # installation on top of the base image
@@ -143,10 +143,10 @@ services:
     entrypoint: bash
     stdin_open: true
     tty: true
-    devices:
-    - /dev/hidraw0:/dev/hidraw0
-    - /dev/hidraw1:/dev/hidraw1
-    - /dev/hidraw2:/dev/hidraw2
+    # devices:
+    # - /dev/hidraw0:/dev/hidraw0
+    # - /dev/hidraw1:/dev/hidraw1
+    # - /dev/hidraw2:/dev/hidraw2
 
 volumes:
   # isaac-sim

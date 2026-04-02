@@ -146,9 +146,10 @@ def main():
 
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
-
+    print(f"Starting conversion.....")
     with h5py.File(args.input_file, "r") as f_in, h5py.File(args.output_file, "w") as f_out:
         # Copy all data from input to output
+        print(f"Copying data from {args.input_file} to {args.output_file}")
         f_in.copy("data", f_out)
 
         # Get the largest demo ID to start new demos from
@@ -157,11 +158,12 @@ def main():
         print(f"Starting new demos from ID: {next_demo_id}")
 
         # Process each video and create new demo
-        for video_path in video_paths:
+        for i, video_path in enumerate(video_paths):
             # Extract original demo ID from video filename
             video_filename = os.path.basename(video_path)
             orig_demo_id = int(video_filename.split("_")[1])
 
+            print(f"[{i+1}/{len(video_paths)}] Processing {video_filename} (orig ID: {orig_demo_id}) -> new demo ID: {next_demo_id}")
             process_video_and_demo(f_in, f_out, video_path, orig_demo_id, next_demo_id)
             next_demo_id += 1
 

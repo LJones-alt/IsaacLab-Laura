@@ -39,7 +39,7 @@ def generate_prompt(templates_path: str):
 
     The prompt describes the scene and desired visual variations, which the model
     uses to guide the augmentation process while preserving the core robotic actions.
-
+ 
     Args:
         templates_path (str): Path to the JSON file containing prompt templates.
 

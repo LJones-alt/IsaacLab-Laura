@@ -18,6 +18,7 @@
 #no path files 
 **/*.pth
 **/*.hdf5
+**/*.mp4
 **/*.txt
 
 # Python
