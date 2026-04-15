@@ -32,12 +32,94 @@ from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG
 ## add some cameras in
 
 
+@configclass
+class ObservationsCfg:
+    """Observation specifications for the MDP."""
+
+    @configclass
+    class PolicyCfg(ObsGroup):
+        """Observations for policy group with state values."""
+
+        actions = ObsTerm(func=mdp.last_action)
+        joint_pos = ObsTerm(func=mdp.joint_pos_rel)
+        joint_vel = ObsTerm(func=mdp.joint_vel_rel)
+        #object = ObsTerm(func=mdp.object_obs)
+        #cube_positions = ObsTerm(func=mdp.cube_positions_in_world_frame)
+        #cube_orientations = ObsTerm(func=mdp.cube_orientations_in_world_frame)
+        eef_pos = ObsTerm(func=mdp.ee_frame_pos)
+        eef_quat = ObsTerm(func=mdp.ee_frame_quat)
+        gripper_pos = ObsTerm(func=mdp.gripper_pos)
+        table_cam = ObsTerm(
+            func=mdp.image, params={"sensor_cfg": SceneEntityCfg("table_cam"), "data_type": "rgb", "normalize": False}
+        )
+        wrist_cam = ObsTerm(
+            func=mdp.image, params={"sensor_cfg": SceneEntityCfg("wrist_cam"), "data_type": "rgb", "normalize": False}
+        )
+        table_cam_segmentation = ObsTerm(
+            func=mdp.image,
+            params={"sensor_cfg": SceneEntityCfg("table_cam"), "data_type": "semantic_segmentation", "normalize": True},
+        )
+        table_cam_normals = ObsTerm(
+            func=mdp.image,
+            params={
+                "sensor_cfg": SceneEntityCfg("table_cam"), 
+                "data_type": "normals", 
+                "normalize": True},
+        )
+        table_cam_depth = ObsTerm(
+            func=mdp.image,
+            params={
+                "sensor_cfg": SceneEntityCfg("table_cam"),
+                "data_type": "distance_to_image_plane",
+                "normalize": True,
+            },
+        )
+
+        def __post_init__(self):
+            self.enable_corruption = False
+            self.concatenate_terms = False
+
+    @configclass
+    class SubtaskCfg(ObsGroup):
+        """Observations for subtask group."""
+
+        grasp = ObsTerm(
+            func=mdp.object_grasped,
+            params={
+                "robot_cfg": SceneEntityCfg("robot"),
+                "ee_frame_cfg": SceneEntityCfg("ee_frame"),
+                "object_cfg": SceneEntityCfg("object"),
+            },
+        )
+        def __post_init__(self):
+            self.enable_corruption = False
+            self.concatenate_terms = False
+
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+    subtask_terms: SubtaskCfg = SubtaskCfg()
 
 @configclass
 class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
+    observations: ObservationsCfg = ObservationsCfg()
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
+        import carb
+        from isaacsim.core.utils.carb import set_carb_setting
+
+        carb_setting = carb.settings.get_settings()
+        set_carb_setting(carb_setting, "/rtx/domeLight/upperLowerStrategy", 4)
+        SEMANTIC_MAPPING = {
+            "class:object": (120, 230, 255, 255),
+            "class:stirplate": (255, 36, 66, 255),
+            "class:vialrack": (55, 255, 139, 255),
+            "class:table": (255, 237, 218, 255),
+            "class:ground": (100, 100, 100, 255),
+            "class:robot": (204, 110, 248, 255),
+            "class:UNLABELLED": (150, 150, 150, 255),
+            "class:BACKGROUND": (200, 200, 200, 255),
+        }
         # put the beaker on the stir plate
         glassware = ChemistryGlassware()
         self.scene.stirplate = glassware.stirplate(pos=[0.5, 0.0, 0.01])
@@ -47,14 +129,14 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         self.observations.policy.target_object_position = ObsTerm(func=mdp.target_position, params={"object_cfg": SceneEntityCfg("vialrack")})
         
         ### subtask 
-        self.observations.subtask_terms.stacked = ObsTerm(
-            func=mdp.object_stacked,
-            params={
-                "robot_cfg": SceneEntityCfg("robot"),
-                "upper_object_cfg": SceneEntityCfg("object"),
-                "lower_object_cfg": SceneEntityCfg("vialrack"),
-            },
-        )
+        # self.observations.subtask_terms.stacked = ObsTerm(
+        #     func=mdp.object_stacked,
+        #     params={
+        #         "robot_cfg": SceneEntityCfg("robot"),
+        #         "upper_object_cfg": SceneEntityCfg("object"),
+        #         "lower_object_cfg": SceneEntityCfg("vialrack"),
+        #     },
+        # )
 
 
 
@@ -74,18 +156,30 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         )
         self.rerender_on_reset = True
         self.sim.render.antialiasing_mode = "OFF"  # disable dlss
-
-        # List of image observations in policy observations
-        self.image_obs_list = ["table_cam", "wrist_cam"]
-
-
-        # Set table view camera
+        
+        # Set wrist camera
+        self.scene.wrist_cam = CameraCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/panda_hand/wrist_cam",
+            update_period=0.0,
+            height=200,
+            width=200,
+            data_types=["rgb", "distance_to_image_plane"],
+            spawn=sim_utils.PinholeCameraCfg(
+                focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 2)
+            ),
+            offset=CameraCfg.OffsetCfg(
+                pos=(0.13, 0.0, -0.15), rot=(-0.70614, 0.03701, 0.03701, -0.70614), convention="ros"
+            ),
+        )
+         # Set table view camera
         self.scene.table_cam = CameraCfg(
             prim_path="{ENV_REGEX_NS}/table_cam",
             update_period=0.0,
-            height=84,
-            width=84,
-            data_types=["rgb", "distance_to_image_plane"],
+            height=200,
+            width=200,
+            data_types=["rgb", "semantic_segmentation", "normals", "distance_to_image_plane"],
+            colorize_semantic_segmentation=True,
+            semantic_segmentation_mapping=SEMANTIC_MAPPING,
             spawn=sim_utils.PinholeCameraCfg(
                 focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 2)
             ),
@@ -93,7 +187,8 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
                 pos=(1.0, 0.0, 0.4), rot=(0.35355, -0.61237, -0.61237, 0.35355), convention="ros"
             ),
         )
-
+        # List of image observations in policy observations
+        self.image_obs_list = ["table_cam", "wrist_cam"]
 
         self.events.reset_object_position = EventTerm(
             func=mdp.reset_place_root_state_uniform,
@@ -114,63 +209,53 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
             params={
                 "intensity_range": (1500.0, 10000.0),
                 "color_variation": 0.4,
-                "textures": [
-                    f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/hospital_room_4k.hdr",
-                    f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/surgery_4k.hdr",
-                    f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Studio/photo_studio_01_4k.hdr",
-                ],
                 "default_intensity": 3000.0,
                 "default_color": (0.75, 0.75, 0.75),
                 "default_texture": "",
             },
         )
+         # Set settings for camera rendering
+        self.rerender_on_reset = True
+        self.sim.render.antialiasing_mode = "OFF"  # disable dlss
 
-        self.events.randomize_table_visual_material = EventTerm(
+        # List of image observations in policy observations
+        self.image_obs_list = ["table_cam", "wrist_cam"]
+        # self.events.randomize_table_visual_material = EventTerm(
+        #     func=franka_stack_events.randomize_visual_texture_material,
+        #     mode="reset",
+        #     params={
+        #         "asset_cfg": SceneEntityCfg("table"),
+        #         "textures": [
+        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Steel_Stainless/Steel_Stainless_BaseColor.png",
+        #         ],
+        #         "default_texture": (
+        #             f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/Materials/Textures/DemoTable_TableBase_BaseColor.png"
+        #         ),
+        #     },
+        # )
+
+        self.events.randomize_robot_arm_visual_texture = EventTerm(
             func=franka_stack_events.randomize_visual_texture_material,
             mode="reset",
             params={
                 "asset_cfg": SceneEntityCfg("table"),
                 "textures": [
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Aluminum_Polished/Aluminum_Polished_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Brass/Brass_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Bronze/Bronze_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Brushed_Antique_Copper/Brushed_Antique_Copper_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Cast_Metal_Silver_Vein/Cast_Metal_Silver_Vein_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Copper/Copper_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Gold/Gold_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Iron/Iron_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/RustedMetal/RustedMetal_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Silver/Silver_BaseColor.png",
+                    f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Steel_Carbon/Steel_Carbon_BaseColor.png",
                     f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Steel_Stainless/Steel_Stainless_BaseColor.png",
                 ],
-                "default_texture": (
-                    f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/Materials/Textures/DemoTable_TableBase_BaseColor.png"
-                ),
             },
         )
-
-        # self.events.randomize_robot_arm_visual_texture = EventTerm(
-        #     func=franka_stack_events.randomize_visual_texture_material,
-        #     mode="reset",
-        #     params={
-        #         "asset_cfg": SceneEntityCfg("robot"),
-        #         "textures": [
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Aluminum_Cast/Aluminum_Cast_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Aluminum_Polished/Aluminum_Polished_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Brass/Brass_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Bronze/Bronze_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Brushed_Antique_Copper/Brushed_Antique_Copper_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Cast_Metal_Silver_Vein/Cast_Metal_Silver_Vein_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Copper/Copper_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Gold/Gold_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Iron/Iron_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/RustedMetal/RustedMetal_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Silver/Silver_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Steel_Carbon/Steel_Carbon_BaseColor.png",
-        #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Steel_Stainless/Steel_Stainless_BaseColor.png",
-        #         ],
-        #     },
-        # )
-
-        #### VISION BASED OBS
-        self.observations.policy.table_cam = ObsTerm(
-            func=mdp.image, params={"sensor_cfg": SceneEntityCfg("table_cam"), "data_type": "rgb", "normalize": False}
-        )
-        self.observations.policy.wrist_cam = ObsTerm(
-            func=mdp.image, params={"sensor_cfg": SceneEntityCfg("wrist_cam"), "data_type": "rgb", "normalize": False}
-        )
-
-
 
         #self.scene.robot = UR10e_ROBOTIQ_GRIPPER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
@@ -191,6 +276,8 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
             ),
         )
         # replace with relative position controller 
+
+        ##TODO change this for a torque controller 
         self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
             asset_name="robot",
             joint_names=["panda_joint.*"],

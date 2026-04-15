@@ -26,7 +26,7 @@ class ObservationsCfg:
         actions = ObsTerm(func=mdp.last_action)
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
-        object = ObsTerm(func=mdp.object_obs)
+        #object = ObsTerm(func=mdp.object_obs)
         cube_positions = ObsTerm(func=mdp.cube_positions_in_world_frame)
         cube_orientations = ObsTerm(func=mdp.cube_orientations_in_world_frame)
         eef_pos = ObsTerm(func=mdp.ee_frame_pos)

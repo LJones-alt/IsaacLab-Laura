@@ -72,7 +72,7 @@ def main():
     """Main function to process all model directories."""
     # Define paths - handle both host and Docker container paths
     script_dir = Path(__file__).parent.resolve()
-    base_dir = script_dir / "/workspace/isaaclab/robomimic/Dev-IK-Rel-Insert-v1"
+    base_dir = script_dir / "/docs/docs/place/model/Isaac-Stack-Cube-Franka-IK-Rel-Visuomotor-Cosmos-v0/bc_policy_cube_stack/20260414090424/"
     output_dir = base_dir / "best_models"
     
     # Create output directory (including parent directories if needed)

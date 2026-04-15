@@ -77,6 +77,7 @@ gym.register(
         "env_cfg_entry_point": stack_ik_rel_visuomotor_cosmos_env_cfg.FrankaCubeStackVisuomotorCosmosEnvCfg,
         "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_rnn_image_cosmos.json"),
         "robomimic_diffusion_policy_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/diffusion_policy.json"),
+        "robomimic_improved_diffusion_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/improved_diffusion.json"),
     },
     disable_env_checker=True,
 )

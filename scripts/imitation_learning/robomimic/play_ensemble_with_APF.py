@@ -309,12 +309,10 @@ def rollout_ensemble(ensemble, env, success_term, horizon, device, parameters, u
             # Process image observations for robomimic inference
             for image_name in env.cfg.image_obs_list:
                 if image_name in obs_dict["policy"].keys():
-                    # Convert from chw uint8 to hwc normalized float
-                    image = torch.squeeze(obs_dict["policy"][image_name])
-                    image = image.permute(2, 0, 1).clone().float()
-                    image = image / 255.0
-                    image = image.clip(0.0, 1.0)
-                    obs[image_name] = image
+                    # IsaacLab naturally outputs HWC tensors.
+                    # Robomimic will assert frame.shape[-1] == 3 or channel_dim,
+                    # and will automatically permute it to CHW & scale by 1/255 inside its process_frame.
+                    pass
         # eef_pos is (num_envs, 3), eef_quat is (num_envs, 4)
        
         

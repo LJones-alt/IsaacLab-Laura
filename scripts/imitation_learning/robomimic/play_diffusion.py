@@ -32,7 +32,7 @@ parser.add_argument(
 )
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--checkpoint", type=str, default=None, help="Pytorch model checkpoint to load.")
-parser.add_argument("--horizon", type=int, default=800, help="Step horizon of each rollout.")
+parser.add_argument("--horizon", type=int, default=400, help="Step horizon of each rollout.")
 parser.add_argument("--num_rollouts", type=int, default=1, help="Number of rollouts.")
 parser.add_argument("--seed", type=int, default=101, help="Random seed.")
 parser.add_argument(
@@ -77,17 +77,21 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 
 def get_observation_horizon(policy):
-    """Get the observation horizon from diffusion policy config.
-    
-    Args:
-        policy: The loaded robomimic policy wrapper.
-        
-    Returns:
-        int: The observation horizon (default 2 for diffusion policy).
-    """
+    """Get the observation horizon from diffusion policy config."""
+    # Try algo_config first (robomimic's internal config object)
     if hasattr(policy.policy, 'algo_config') and hasattr(policy.policy.algo_config, 'horizon'):
-        return policy.policy.algo_config.horizon.observation_horizon
-    # Default for diffusion policy if not found
+        h = policy.policy.algo_config.horizon.observation_horizon
+        print(f"[DEBUG] observation_horizon from algo_config: {h}")
+        return h
+    # Try global_config
+    if hasattr(policy.policy, 'global_config'):
+        try:
+            h = policy.policy.global_config.algo.horizon.observation_horizon
+            print(f"[DEBUG] observation_horizon from global_config: {h}")
+            return h
+        except AttributeError:
+            pass
+    print("[WARNING] Could not find observation_horizon, defaulting to 2")
     return 2
 
 
@@ -152,49 +156,49 @@ def rollout(policy, env, success_term, horizon, device):
 
     # Setup temporal observation history for diffusion policy
     observation_horizon = get_observation_horizon(policy)
+    print(f"[INFO] Using observation_horizon={observation_horizon} for rollout")
     obs_history = deque(maxlen=observation_horizon)
+
+    # Diagnose image dtype and range on first step
+    if "table_cam" in obs_dict["policy"]:
+        img = obs_dict["policy"]["table_cam"]
+        print(f"[DEBUG] table_cam: dtype={img.dtype}, shape={img.shape}, "
+              f"min={img.min().item():.3f}, max={img.max().item():.3f}")
     
     # Initialize history with first observation (repeated to fill the queue)
+    # Filter observations to only include keys the policy was trained on
+    filtered_first_obs_dict = {k: v for k, v in obs_dict["policy"].items() if k in policy.policy.obs_shapes}
+    
     first_obs = {}
-    for k in obs_dict["policy"]:
-        if obs_dict["policy"][k].dim() > 1:
-            first_obs[k] = obs_dict["policy"][k].squeeze(0)
+    for k in filtered_first_obs_dict:
+        if filtered_first_obs_dict[k].dim() > 1:
+            first_obs[k] = filtered_first_obs_dict[k].squeeze(0)
         else:
-            first_obs[k] = obs_dict["policy"][k]
+            first_obs[k] = filtered_first_obs_dict[k]
     
     # Fill history with copies of first observation
     for _ in range(observation_horizon):
         obs_history.append(copy.deepcopy(first_obs))
 
+
     for i in range(horizon):
-        # Prepare observations with temporal stacking for diffusion policy
-        obs = prepare_obs_for_diffusion(obs_dict["policy"], obs_history)
+        # Filter observations to only include keys the policy was trained on
+        # robomimic handles image processing internally (HWC uint8 -> normalization)
+        filtered_obs_dict = {k: v for k, v in obs_dict["policy"].items() if k in policy.policy.obs_shapes}
 
-        # Debug: print gripper observation at key steps
-        # if i == 0 or i == 5:
-        #     print(f"\n[DEBUG] Step {i} - Observations:")
-        #     print(f"  gripper_pos: {obs['gripper_pos'][0, -1, :].cpu().numpy()}")  # Last timestep
-        #     print(f"  eef_pos: {obs['eef_pos'][0, -1, :].cpu().numpy()}")
-        #     print(f"  object_position: {obs['object_position'][0, -1, :].cpu().numpy()}")
-
-        # Check if environment has image observations
-        if hasattr(env.cfg, "image_obs_list"):
-            # Process image observations for robomimic inference
-            for image_name in env.cfg.image_obs_list:
-                if image_name in obs_dict["policy"].keys():
-                    # Convert from chw uint8 to hwc normalized float
-                    image = torch.squeeze(obs_dict["policy"][image_name])
-                    image = image.permute(2, 0, 1).clone().float()
-                    image = image / 255.0
-                    image = image.clip(0.0, 1.0)
-                    # Stack image observations temporally as well
-                    obs[image_name] = image.unsqueeze(0).unsqueeze(0).expand(1, observation_horizon, -1, -1, -1)
+        # Stack temporally for diffusion policy: history gives [1, T, D] tensors
+        obs = prepare_obs_for_diffusion(filtered_obs_dict, obs_history)
 
         traj["obs"].append(obs)
 
         # Compute actions from diffusion policy
         # Use batched_ob=True because we already have batch dimension [1, T, D]
         actions = policy(obs, batched_ob=True)
+
+        # Diagnose action output on first few steps
+        if i < 3:
+            act_flat = actions.flatten().tolist()
+            print(f"[DEBUG] Step {i} arm actions: {[f'{v:.3f}' for v in act_flat[:6]]}, gripper: {act_flat[6]:.4f}")
 
         # Debug: print action stats periodically
         # if i == 0 or i == 10 or i == 50:

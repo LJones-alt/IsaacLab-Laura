@@ -59,7 +59,7 @@
         ],
         "cuda": true,
         "batch_size": 128,
-        "num_epochs": 1000,
+        "num_epochs": 600,
         "seed": 101
     },
     "algo": {
@@ -128,9 +128,12 @@
                     "gripper_pos"
                 ],
                 "rgb": [
-                    "table_cam"
+                    "table_cam",
+                    "wrist_cam"
                 ],
-                "depth": [],
+                "depth": [
+                    "table_cam_depth"
+                ],
                 "scan": []
             },
             "goal": {

@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -65,7 +65,8 @@ AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
 if args_cli.enable_pinocchio:
-    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
+    # Import pinocchio before AppLauncher to force the use of the version installed
+    # by IsaacLab and not the one installed by Isaac Sim.
     # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
     import pinocchio  # noqa: F401
 
@@ -76,46 +77,16 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import copy
-import gymnasium as gym
 import os
 import pathlib
 import random
-import torch
-from collections import deque
 
+import gymnasium as gym
 import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.torch_utils as TorchUtils
+import torch
 
 from isaaclab_tasks.utils import parse_env_cfg
-
-
-def get_observation_horizon(policy):
-    """Get the observation horizon from the policy."""
-    if hasattr(policy.policy, "horizon_spec"):
-        return policy.policy.horizon_spec["observation_horizon"]
-    return 1
-
-
-def prepare_obs_for_diffusion(obs_dict, obs_history):
-    """Prepare observations for diffusion policy inference."""
-    current_obs = {}
-    for k in obs_dict:
-        if obs_dict[k].dim() > 1:
-            current_obs[k] = obs_dict[k].squeeze(0)
-        else:
-            current_obs[k] = obs_dict[k]
-
-    # Add current observation to history
-    obs_history.append(current_obs)
-
-    # Convert history to stacked tensor [1, T, D]
-    stacked_obs = {}
-    for k in obs_dict:
-        obs_list = [obs_history[i][k] for i in range(len(obs_history))]
-        stacked = torch.stack(obs_list, dim=0).unsqueeze(0)  # [1, T, D]
-        stacked_obs[k] = stacked
-
-    return stacked_obs
 
 
 def rollout(policy, env: gym.Env, success_term, horizon: int, device: torch.device) -> tuple[bool, dict]:
@@ -136,129 +107,31 @@ def rollout(policy, env: gym.Env, success_term, horizon: int, device: torch.devi
     obs_dict, _ = env.reset()
     traj = dict(actions=[], obs=[], next_obs=[])
 
-    # Prepare observation history for policies that need it (e.g. Diffusion)
-    observation_horizon = get_observation_horizon(policy)
-    
-    # Diffusion policies often have a mismatch if horizon is misreported or keys are filtered
-    is_diffusion = "Diffusion" in type(policy.policy).__name__
-    if is_diffusion and observation_horizon == 1:
-        # Check if it should be 2 based on common IsaacLab-Robomimic configs
-        print("DEBUG: Diffusion policy detected with horizon 1. Potential misreport. Checking for horizon 2...")
-        pass
-
-    print(f"DEBUG: Policy class: {type(policy.policy)}")
-    print(f"DEBUG: observation_horizon: {observation_horizon}")
-    
-    # Include suspected missing keys if they are in the environment
-    additional_keys = ["object", "joint_pos", "joint_vel", "cube_positions", "actions"]
-    available_policy_keys = list(policy.policy.obs_shapes.keys())
-    for k in additional_keys:
-        if k in obs_dict["policy"] and k not in available_policy_keys:
-            print(f"DEBUG: Adding missing key to allow list: {k}")
-            available_policy_keys.append(k)
-
-    obs_history = deque(maxlen=observation_horizon)
-
-    # Initialize history with first observation (repeated to fill the queue)
-    # Filter observations
-    filtered_first_obs_dict = {k: v for k, v in obs_dict["policy"].items() if k in available_policy_keys}
-    first_obs = {}
-    for k in filtered_first_obs_dict:
-        if filtered_first_obs_dict[k].dim() > 1:
-            first_obs[k] = filtered_first_obs_dict[k].squeeze(0)
-        else:
-            first_obs[k] = filtered_first_obs_dict[k]
-
-    # Fill history with copies of first observation
-    for _ in range(observation_horizon):
-        obs_history.append(copy.deepcopy(first_obs))
-
-    is_diffusion = "Diffusion" in type(policy.policy).__name__
-    
-    # --- Surgical Monkeypatch for 329 -> 402 shape mismatch ---
-    if is_diffusion:
-        original_get_action_trajectory = policy.policy._get_action_trajectory
-
-        def patched_get_action_trajectory(obs_dict, goal_dict=None):
-            # 1. Get the conditioning vector from the encoder
-            # In most Diffusion versions, this is how inputs are prepared:
-            # inputs = self._prepare_inputs(obs_dict) or similar
-            # Since _prepare_inputs was missing, we'll try to follow the internal logic
-            
-            # The error happens when calling nets["policy"]["noise_pred_net"]
-            # with a global_feature of size 329.
-            
-            # We will patch the noise_pred_net's forward instead!
-            noise_net = policy.policy.nets["policy"]["noise_pred_net"]
-            if not hasattr(noise_net, "_original_forward"):
-                noise_net._original_forward = noise_net.forward
-
-                def patched_forward(sample, timesteps, global_feature=None, **kwargs):
-                    if global_feature is not None and global_feature.shape[-1] == 329:
-                        # Find the extra features in the global scope's obs_dict if possible,
-                        # but we can't easily reach it from here.
-                        # However, we can use the 'obs' from the outer rollout loop!
-                        # But wait, global_feature is already batched [B, D]. 
-                        # We need to append the extra features [B, 73].
-                        
-                        # Since we can't easily get the features here, we'll pad with zeros
-                        # to at least stop the crash and see if it runs.
-                        # If the model really needs them, we can find a way to pass them.
-                        print(f"DEBUG: Monkeypatching global_feature from 329 to 402")
-                        padding = torch.zeros((global_feature.shape[0], 73), device=global_feature.device)
-                        global_feature = torch.cat([global_feature, padding], dim=-1)
-                    
-                    return noise_net._original_forward(sample, timesteps, global_feature=global_feature, **kwargs)
-                
-                noise_net.forward = patched_forward
-
-            return original_get_action_trajectory(obs_dict, goal_dict=goal_dict)
-
-        policy.policy._get_action_trajectory = patched_get_action_trajectory
-    # --- End Monkeypatch ---
-
     for _ in range(horizon):
         # Prepare policy observations
-        # Filter observations to only include keys the policy was trained on
-       # print(f"DEBUG: Rolling out step, filtering observations...")
-        filtered_obs = {k: v for k, v in obs_dict["policy"].items() if k in available_policy_keys}
-      #  print(f"DEBUG: Filtered keys: {list(filtered_obs.keys())}")
+        obs = copy.deepcopy(obs_dict["policy"])
+        print(f"Got obs  : {obs.keys()}")  
+        for ob in obs:
+            obs[ob] = torch.squeeze(obs[ob])
 
-        if observation_horizon > 1:
-            # Policy needs history (e.g. Diffusion)
-            obs = prepare_obs_for_diffusion(filtered_obs, obs_history)
-        else:
-            # Markovian policy or horizon=1. 
-            # If it's a Diffusion policy, it still needs [B, T, D] even if T=1
-            obs = {k: torch.squeeze(v) for k, v in filtered_obs.items()}
-            # Check if it's diffusion by checking class name (to avoid import)
-            if "Diffusion" in type(policy.policy).__name__:
-                obs = {k: v.unsqueeze(0).unsqueeze(0) for k, v in obs.items()} # [1, 1, D]
-            else:
-                pass # remains (D,) as robomimic will add batch dim
+        # Check if environment image observations
+        if hasattr(env.cfg, "image_obs_list"):
+            print(f"Image observations: {env.cfg.image_obs_list}")
+            # Process image observations for robomimic inference
+            for image_name in env.cfg.image_obs_list:
+                if image_name in obs_dict["policy"].keys():
+                    # Convert from chw uint8 to hwc normalized float
+                    image = torch.squeeze(obs_dict["policy"][image_name])
+                    image = image.permute(2, 0, 1).clone().float()
+                    image = image / 255.0
+                    image = image.clip(0.0, 1.0)
+                    obs[image_name] = image
 
         traj["obs"].append(obs)
 
-        # Debug: check shapes before policy call
-      #  print(f"DEBUG: Policy call with batched_ob={(observation_horizon > 1 or 'Diffusion' in type(policy.policy).__name__)}")
-        # Sum total features to check against 402
-        total_feats = 0
-        for k, v in obs.items():
-            print(f"  {k}: shape={v.shape}, ndim={v.ndim}")
-            # For Diffusion [1, T, D], we care about D. For images, D is flatten.
-            if v.ndim == 3: # [1, T, D]
-                total_feats += v.shape[-1]
-            elif v.ndim == 5: # [1, T, C, H, W] -> embedding size
-                # We don't know embedding size easily without encoding, 
-                # but we know it's probably 320 for ResNet18
-                total_feats += 320 
-       # print(f"DEBUG: Estimated total features: {total_feats}")
-
         # Compute actions
-        # Use batched_ob=True if we have a temporal dimension
-        is_diffusion = "Diffusion" in type(policy.policy).__name__
-        actions = policy(obs, batched_ob=(observation_horizon > 1 or is_diffusion))
-
+        actions = policy(obs)
+        print(f"Actions: {actions}")
         # Unnormalize actions if normalization factors are provided
         if args_cli.norm_factor_min is not None and args_cli.norm_factor_max is not None:
             actions = (
@@ -314,7 +187,7 @@ def evaluate_model(
 
     # Load policy
     policy, _ = FileUtils.policy_from_checkpoint(ckpt_path=model_path, device=device, verbose=False)
-
+    print(f"[DEBUG] Policy : {policy}")
     # Run policy
     results = []
     for trial in range(num_rollouts):
@@ -407,7 +280,7 @@ def main() -> None:
 
                 print(f"Evaluation setting: {setting}")
                 print("=" * 80)
-
+                print(f"Now starting to evaluate model")
                 # Evaluate each model
                 for model in model_checkpoints:
                     # Skip early checkpoints

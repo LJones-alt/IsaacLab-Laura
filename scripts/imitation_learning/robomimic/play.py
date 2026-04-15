@@ -33,7 +33,7 @@ parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--checkpoint", type=str, default=None, help="Pytorch model checkpoint to load.")
 parser.add_argument("--horizon", type=int, default=800, help="Step horizon of each rollout.")
 parser.add_argument("--num_rollouts", type=int, default=1, help="Number of rollouts.")
-parser.add_argument("--seed", type=int, default=101, help="Random seed.")
+parser.add_argument("--seed", type=int, default=0, help="Random seed.")
 parser.add_argument(
     "--norm_factor_min", type=float, default=None, help="Optional: minimum value of the normalization factor."
 )
@@ -89,29 +89,15 @@ def rollout(policy, env, success_term, horizon, device):
     """
     policy.start_episode()
     obs_dict, _ = env.reset()
-    print("[INFO] Policy expected obs keys:", policy)
+  #  print("[INFO] Policy expected obs keys:", policy)
     
     traj = dict(actions=[], obs=[], next_obs=[])
 
     for i in range(horizon):
-        # Prepare observations
-        obs = copy.deepcopy(obs_dict["policy"])
-        for ob in obs:
-            obs[ob] = torch.squeeze(obs[ob])
-
-        # Check if environment image observations
-        if hasattr(env.cfg, "image_obs_list"):
-            # Process image observations for robomimic inference
-            for image_name in env.cfg.image_obs_list:
-                if image_name in obs_dict["policy"].keys():
-                    # Convert from chw uint8 to hwc normalized float
-                    image = torch.squeeze(obs_dict["policy"][image_name])
-                    image = image.permute(2, 0, 1).clone().float()
-                    image = image / 255.0
-                    image = image.clip(0.0, 1.0)
-                    obs[image_name] = image
-
-        traj["obs"].append(obs)
+        # Only pass the keys the policy was trained on — extra keys cause robomimic to
+        # misinterpret image tensors as low_dim, breaking inference.
+        obs = {k: torch.squeeze(v) for k, v in obs_dict["policy"].items()
+               if k in policy.policy.obs_shapes}
 
         # Compute actions
         actions = policy(obs)
@@ -145,6 +131,8 @@ def main():
     """Run a trained policy from robomimic with Isaac Lab environment."""
     # parse configuration
     env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1, use_fabric=not args_cli.disable_fabric)
+    env_cfg.eval_mode = True
+    env_cfg.eval_type = "vanilla"
 
     # Set observations to dictionary mode for Robomimic
     env_cfg.observations.policy.concatenate_terms = False
