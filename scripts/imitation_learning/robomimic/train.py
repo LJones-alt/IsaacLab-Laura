@@ -58,6 +58,10 @@ import argparse
 
 # Third-party imports
 import gymnasium as gym
+import sys
+
+# Aliasing gymnasium to gym for robomimic compatibility
+sys.modules["gym"] = gym
 import h5py
 import json
 import numpy as np
@@ -85,8 +89,10 @@ from robomimic.utils.log_utils import DataLogger, PrintLogger
 
 # Isaac Lab imports (needed so that environment is registered)
 import isaaclab_tasks  # noqa: F401
-import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
-
+from isaaclab_tasks.manager_based.manipulation.cube_lift import * # noqa: F401
+from isaaclab_tasks.manager_based.manipulation.cube_lift import mdp
+from isaaclab_tasks.manager_based.manipulation.cube_lift.mdp import franka_stack_events
+from isaaclab_tasks.manager_based.manipulation.cube_lift.lift_env_cfg import CubeEnvCfg
 
 def normalize_hdf5_actions(config: Config, log_dir: str) -> list:
     """Normalizes actions in hdf5 dataset to [-1, 1] range.
@@ -396,6 +402,7 @@ def main(args: argparse.Namespace):
     # load config
     if args.task is not None:
         # obtain the configuration entry point
+        print(f"robomimic_{args.algo}_cfg_entry_point")
         cfg_entry_point_key = f"robomimic_{args.algo}_cfg_entry_point"
         task_name = args.task.split(":")[-1]
 
@@ -496,7 +503,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
+    print(f"args : {args}")
     # run training
     main(args)
     # close sim app

@@ -6,11 +6,11 @@
 from isaaclab.envs.mimic_env_cfg import MimicEnvCfg, SubTaskConfig
 from isaaclab.utils import configclass
 
-from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_env_place_vismot import FrankaDevEnvVMCfg
+from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_vial_lift_top_dow import FrankaDevEnvCfg
 
 
 @configclass
-class CubeMimicVMEnvCfg(FrankaDevEnvVMCfg, MimicEnvCfg):
+class CubeMimicVMEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
     """
     Isaac Lab Mimic environment config class for Franka Cube Stack IK Rel env.
     """
@@ -138,7 +138,7 @@ class CubeMimicVMEnvCfg(FrankaDevEnvVMCfg, MimicEnvCfg):
                 object_ref="object",
                 # End of final subtask - when using --annotate_subtask_start_signals, 
                 # the last subtask must also have a signal name
-                subtask_term_signal="stacked",
+                subtask_term_signal="appr_goal",
                 # No time offsets for the final subtask
                 subtask_term_offset_range=(0, 0),
                 # Selection strategy for source subtask segment

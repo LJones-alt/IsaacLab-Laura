@@ -70,6 +70,7 @@ class FrankaCubeEnvCfg(CubeEnvCfg):
                     name="end_effector",
                     offset=OffsetCfg(
                         pos=[0.0, 0.0, 0.1034],
+                        quat=[1.0, 1.0, 0.0, 0.0],
                     ),
                 ),
                 FrameTransformerCfg.FrameCfg(

@@ -23,7 +23,10 @@ from isaaclab_tasks.manager_based.manipulation.cube_lift import mdp
 from isaaclab_tasks.manager_based.manipulation.cube_lift.mdp import franka_stack_events
 
 from isaaclab.managers import TerminationTermCfg as DoneTerm
-##
+from isaaclab.assets import RigidObjectCfg
+from isaaclab.sensors import FrameTransformerCfg
+from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
+from isaaclab.markers.config import FRAME_MARKER_CFG 
 # Pre-defined configs
 ##
 from isaaclab_assets.robots.franka import FRANKA_PANDA_HIGH_PD_CFG  # isort: skip
@@ -75,25 +78,26 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
                 "asset3_cfg" : SceneEntityCfg("vialrack")
             },
         )
-        self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+       # self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         #self.scene.robot = UR10e_ROBOTIQ_GRIPPER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-        # self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
-        #     prim_path="{ENV_REGEX_NS}/Robot",
-        #     init_state=ArticulationCfg.InitialStateCfg(
-        #         joint_pos={
-                    
-        #             "panda_joint1":  0.3281,
-        #             "panda_joint2": -0.3684,   
-        #             "panda_joint3":  -0.2787,
-        #             "panda_joint4": -2.6138,  
-        #             "panda_joint5":  -2.7527,
-        #             "panda_joint6":  2.4991,  #  +90° → keeps hand level
-        #             "panda_joint7":  0.3331,
-        #             "panda_finger_joint1": 0.04,   # open gripper
-        #             "panda_finger_joint2": 0.04,
-        #         }
-        #     ),
-        # )
+        self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
+            prim_path="{ENV_REGEX_NS}/Robot",
+            init_state=ArticulationCfg.InitialStateCfg(
+                joint_pos={
+                    "panda_joint1": 0.0,
+                    "panda_joint2": -0.569,
+                    "panda_joint3": 0.0,
+                    "panda_joint4": -2.810,
+                    "panda_joint5": 0.0,
+                    "panda_joint6": 3.037,
+                    "panda_joint7": 0.741,
+                    "panda_finger_joint.*": 0.04,
+                },
+            ),
+        )
+        marker_cfg = FRAME_MARKER_CFG.copy()
+        marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+        marker_cfg.prim_path = "/Visuals/FrameTransformer"
         # replace with relative position controller 
         self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
             asset_name="robot",
@@ -102,6 +106,35 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
             controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),
             scale=0.5,
             body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
+        )
+        self.scene.ee_frame = FrameTransformerCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/panda_link0",
+            debug_vis=False,
+            visualizer_cfg=marker_cfg,
+            target_frames=[
+                FrameTransformerCfg.FrameCfg(
+                    prim_path="{ENV_REGEX_NS}/Robot/panda_hand",
+                    name="end_effector",
+                    offset=OffsetCfg(
+                        pos=[0.0, 0.0, 0.1034],
+                        rot=[1.0, 1.0, 0.0, 0.0],
+                    ),
+                ),
+                FrameTransformerCfg.FrameCfg(
+                    prim_path="{ENV_REGEX_NS}/Robot/panda_rightfinger",
+                    name="tool_rightfinger",
+                    offset=OffsetCfg(
+                        pos=(0.0, 0.0, 0.046),
+                    ),
+                ),
+                FrameTransformerCfg.FrameCfg(
+                    prim_path="{ENV_REGEX_NS}/Robot/panda_leftfinger",
+                    name="tool_leftfinger",
+                    offset=OffsetCfg(
+                        pos=(0.0, 0.0, 0.046),
+                    ),
+                ),
+            ],
         )
 
         self.terminations.success= DoneTerm(func=mdp.object_inserted_upright, params={"lower_object_cfg": SceneEntityCfg("vialrack"), "upright_good_deg": 22.5})

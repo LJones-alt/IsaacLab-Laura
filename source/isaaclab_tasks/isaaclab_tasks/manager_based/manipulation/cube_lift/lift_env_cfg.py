@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+
 from dataclasses import MISSING
 from enum import Enum
 import isaaclab.sim as sim_utils
@@ -24,6 +25,8 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 import warp as wp
 import math
 from . import mdp
+from isaaclab.sensors import ContactSensorCfg
+
 #from isaaclab.utils.logging_helper import LoggingHelper, ErrorType, LogType
 
 
@@ -64,6 +67,12 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
         #spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/ThorlabsTable/table_instanceable.usd"),
         spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"),
     )
+    # contact_forces = ContactSensorCfg(
+    #     prim_path="/World/envs/env_.*/Table",
+    #     update_period=0.0,
+    #     history_length=2,
+    #     debug_vis=False,
+    # )
 
     # plane
     plane = AssetBaseCfg(
@@ -95,23 +104,23 @@ class CommandsCfg:
         asset_name="robot",
         body_name=MISSING,  # will be set by agent env cfg
         resampling_time_range=(10.0, 10.0),
-        debug_vis=True,
+        debug_vis=False,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
           #  pos_x=(0.3,0.3), pos_y=(-0.28, -0.28), pos_z=(0.1, 0.1), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
             pos_x=(0.4,0.4), pos_y=(-0.3, -0.3), pos_z=(0.11, 0.11), roll=(math.pi/2, math.pi/2), pitch=(math.pi/2,math.pi/2), yaw=(0.0, 0.0)
         ),
     )
 
-    midpoint_pose = mdp.UniformPoseCommandCfg(
-        asset_name="robot",
-        body_name="panda_hand", 
-        resampling_time_range=(10.0, 10.0),
-        debug_vis=True,
-        ranges=mdp.UniformPoseCommandCfg.Ranges(
-          #  pos_x=(0.3,0.3), pos_y=(-0.28, -0.28), pos_z=(0.1, 0.1), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
-            pos_x=(0,0), pos_y=(-0.25, -0.25), pos_z=(0.4, 0.4), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
-        ),
-    )
+    # midpoint_pose = mdp.UniformPoseCommandCfg(
+    #     asset_name="robot",
+    #     body_name="panda_hand", 
+    #     resampling_time_range=(10.0, 10.0),
+    #     debug_vis=True,
+    #     ranges=mdp.UniformPoseCommandCfg.Ranges(
+    #       #  pos_x=(0.3,0.3), pos_y=(-0.28, -0.28), pos_z=(0.1, 0.1), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
+    #         pos_x=(0,0), pos_y=(-0.25, -0.25), pos_z=(0.4, 0.4), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
+    #     ),
+    # )
 
 
 @configclass
@@ -136,8 +145,8 @@ class ObservationsCfg():
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
         object_position = ObsTerm(func=mdp.object_position_in_robot_root_frame)
-        target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})
-        #target_object_position = ObsTerm(func=mdp.target_position, params={"object_cfg": SceneEntityCfg("scale")})
+        #target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})
+        target_object_position = ObsTerm(func=mdp.target_position, params={"object_cfg": SceneEntityCfg("scale")})
         actions = ObsTerm(func=mdp.last_action)
        # object_to_target = ObsTerm(func=mdp.object_near_goal)
         eef_pos = ObsTerm(func=mdp.ee_frame_pos)
@@ -343,7 +352,7 @@ class CubeEnvCfg(ManagerBasedRLEnvCfg):
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
     curriculum: CurriculumCfg = CurriculumCfg()
-
+    
     #subtask_statemachine: SubtaskStateMachine = SubtaskStateMachine()
 
     def __post_init__(self):
@@ -356,7 +365,7 @@ class CubeEnvCfg(ManagerBasedRLEnvCfg):
         # simulation settings
         self.sim.dt = 0.01  # 100Hz
         self.sim.render_interval = self.decimation
-        self.viewer.eye = (2.5, 0.5, 0.9)
+        self.viewer.eye = (1.5, 0.0, 0.4)
         self.viewer.lookat = (0.0, 0.0, 0.2)
       #  self.terminations.set_loghelper(self.loghelper)
         #self.events.set_loghelper(self.loghelper)
@@ -367,3 +376,4 @@ class CubeEnvCfg(ManagerBasedRLEnvCfg):
      #   self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024 * 4
        # self.sim.physx.gpu_total_aggregate_pairs_capacity = 16 * 1024
         self.sim.physx.friction_correlation_distance = 0.00625
+       

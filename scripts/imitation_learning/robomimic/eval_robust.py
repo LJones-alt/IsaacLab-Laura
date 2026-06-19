@@ -80,6 +80,9 @@ import copy
 import os
 import pathlib
 import random
+import re
+from collections import deque
+import numpy as np
 
 import gymnasium as gym
 import robomimic.utils.file_utils as FileUtils
@@ -87,6 +90,43 @@ import robomimic.utils.torch_utils as TorchUtils
 import torch
 
 from isaaclab_tasks.utils import parse_env_cfg
+
+
+def get_observation_horizon(policy):
+    """Get the observation horizon from the policy config."""
+    # Diffusion policy specific
+    if hasattr(policy.policy, "algo_config") and hasattr(policy.policy.algo_config, "horizon"):
+        return policy.policy.algo_config.horizon.observation_horizon
+    # Fallback for standard policies
+    return 1
+
+
+def prepare_obs_for_diffusion(obs_dict, obs_history):
+    """Prepare observations for diffusion policy inference.
+    
+    Diffusion policy expects observations with shape [B, T, D] where:
+    - B = batch size (1 for single env inference)
+    - T = observation_horizon (temporal dimension)
+    - D = observation feature dimension
+    """
+    # Store current observation (without batch dimension)
+    current_obs = {}
+    for k in obs_dict:
+        if obs_dict[k].dim() > 1:
+            current_obs[k] = obs_dict[k].squeeze(0)
+        else:
+            current_obs[k] = obs_dict[k]
+    
+    obs_history.append(current_obs)
+    
+    # Stack observations along temporal dimension: [T, D] -> [1, T, D]
+    stacked_obs = {}
+    for k in obs_dict:
+        obs_list = [obs_history[i][k] for i in range(len(obs_history))]
+        stacked = torch.stack(obs_list, dim=0).unsqueeze(0)  # [1, T, D]
+        stacked_obs[k] = stacked
+    
+    return stacked_obs
 
 
 def rollout(policy, env: gym.Env, success_term, horizon: int, device: torch.device) -> tuple[bool, dict]:
@@ -107,31 +147,46 @@ def rollout(policy, env: gym.Env, success_term, horizon: int, device: torch.devi
     obs_dict, _ = env.reset()
     traj = dict(actions=[], obs=[], next_obs=[])
 
-    for _ in range(horizon):
-        # Prepare policy observations
-        obs = copy.deepcopy(obs_dict["policy"])
-        print(f"Got obs  : {obs.keys()}")  
-        for ob in obs:
-            obs[ob] = torch.squeeze(obs[ob])
+    # Setup temporal observation history for diffusion policy
+    observation_horizon = get_observation_horizon(policy)
+    obs_history = deque(maxlen=observation_horizon)
 
-        # Check if environment image observations
-        if hasattr(env.cfg, "image_obs_list"):
-            print(f"Image observations: {env.cfg.image_obs_list}")
-            # Process image observations for robomimic inference
-            for image_name in env.cfg.image_obs_list:
-                if image_name in obs_dict["policy"].keys():
-                    # Convert from chw uint8 to hwc normalized float
-                    image = torch.squeeze(obs_dict["policy"][image_name])
-                    image = image.permute(2, 0, 1).clone().float()
-                    image = image / 255.0
-                    image = image.clip(0.0, 1.0)
-                    obs[image_name] = image
+    # Initialize history with first observation (repeated to fill the queue)
+    # Filter observations to only include keys the policy was trained on
+    filtered_first_obs_dict = {k: v for k, v in obs_dict["policy"].items() if k in policy.policy.obs_shapes}
+    
+    first_obs = {}
+    for k in filtered_first_obs_dict:
+        if filtered_first_obs_dict[k].dim() > 1:
+            first_obs[k] = filtered_first_obs_dict[k].squeeze(0)
+        else:
+            first_obs[k] = filtered_first_obs_dict[k]
+    
+    # Fill history with copies of first observation
+    for _ in range(observation_horizon):
+        obs_history.append(copy.deepcopy(first_obs))
+
+    for _ in range(horizon):
+        # Filter observations to only include keys the policy was trained on
+        # robomimic handles image processing internally (HWC uint8 -> normalization)
+        filtered_obs_dict = {k: v for k, v in obs_dict["policy"].items() if k in policy.policy.obs_shapes}
+
+        if observation_horizon > 1:
+            # Stack temporally for diffusion policy: history gives [1, T, D] tensors
+            obs = prepare_obs_for_diffusion(filtered_obs_dict, obs_history)
+            batched_ob = True
+        else:
+            # Standard policies expect [D] and we let robomimic add batch dim
+            obs = copy.deepcopy(filtered_obs_dict)
+            for ob in obs:
+                obs[ob] = torch.squeeze(obs[ob])
+            batched_ob = False
 
         traj["obs"].append(obs)
 
         # Compute actions
-        actions = policy(obs)
-        print(f"Actions: {actions}")
+        actions = policy(obs, batched_ob=batched_ob)
+       # print(f"Actions: {actions}")
         # Unnormalize actions if normalization factors are provided
         if args_cli.norm_factor_min is not None and args_cli.norm_factor_max is not None:
             actions = (
@@ -283,9 +338,25 @@ def main() -> None:
                 print(f"Now starting to evaluate model")
                 # Evaluate each model
                 for model in model_checkpoints:
+                    # Skip files that are not checkpoints
+                    if not model.endswith((".pth", ".ckpt")):
+                        continue
+
                     # Skip early checkpoints
-                    model_epoch = int(model.split(".")[0].split("_")[-1])
+                    try:
+                        # Try to find "epoch_X" in the filename
+                        match = re.search(r"epoch_(\d+)", model)
+                        if match:
+                            model_epoch = int(match.group(1))
+                        else:
+                            # Fallback to the old logic if "epoch_" not found
+                            model_epoch = int(model.split(".")[0].split("_")[-1])
+                    except (ValueError, IndexError):
+                        # If parsing fails, assume epoch 0
+                        model_epoch = 0
+
                     if model_epoch < args_cli.start_epoch:
+                        print(f"[INFO] Skipping model {model} (epoch {model_epoch} < {args_cli.start_epoch})")
                         continue
 
                     model_path = os.path.join(args_cli.input_dir, model)
@@ -321,11 +392,15 @@ def main() -> None:
                 file.write(f"\nSetting: {setting}\n")
                 for model in results_summary[setting].keys():
                     file.write(f"{model}: {results_summary[setting][model]}\n")
-                max_key = max(results_summary[setting], key=results_summary[setting].get)
-                file.write(
-                    f"\nBest model for setting {setting} is {max_key} with success rate"
-                    f" {results_summary[setting][max_key]}\n"
-                )
+                
+                if results_summary[setting]:
+                    max_key = max(results_summary[setting], key=results_summary[setting].get)
+                    file.write(
+                        f"\nBest model for setting {setting} is {max_key} with success rate"
+                        f" {results_summary[setting][max_key]}\n"
+                    )
+                else:
+                    file.write(f"\nNo models were evaluated for setting {setting}\n")
 
         env.close()
 

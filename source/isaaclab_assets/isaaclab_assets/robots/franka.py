@@ -27,7 +27,7 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 FRANKA_PANDA_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/FrankaEmika/panda_instanceable.usd",
-        activate_contact_sensors=False,
+        activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
             max_depenetration_velocity=5.0,
@@ -35,7 +35,7 @@ FRANKA_PANDA_CFG = ArticulationCfg(
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=True, solver_position_iteration_count=8, solver_velocity_iteration_count=0
         ),
-        # collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+        collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
@@ -69,7 +69,7 @@ FRANKA_PANDA_CFG = ArticulationCfg(
             damping=1e2,
         ),
     },
-    soft_joint_pos_limit_factor=0.9,
+    soft_joint_pos_limit_factor=0.8,
 )
 """Configuration of Franka Emika Panda robot."""
 
@@ -80,6 +80,7 @@ FRANKA_PANDA_HIGH_PD_CFG.actuators["panda_shoulder"].stiffness = 400.0
 FRANKA_PANDA_HIGH_PD_CFG.actuators["panda_shoulder"].damping = 80.0
 FRANKA_PANDA_HIGH_PD_CFG.actuators["panda_forearm"].stiffness = 400.0
 FRANKA_PANDA_HIGH_PD_CFG.actuators["panda_forearm"].damping = 80.0
+#FRANKA_PANDA_HIGH_PD_CFG.soft_joint_pos_limit_factor=0.8,
 """Configuration of Franka Emika Panda robot with stiffer PD control.
 
 This configuration is useful for task-space control using differential IK.
@@ -103,6 +104,7 @@ FRANKA_ROBOTIQ_GRIPPER_CFG.init_state.joint_pos = {
     ".*_inner_finger_knuckle_joint": 0.0,
     ".*_outer_.*_joint": 0.0,
 }
+
 FRANKA_ROBOTIQ_GRIPPER_CFG.init_state.pos = (-0.85, 0, 0.76)
 FRANKA_ROBOTIQ_GRIPPER_CFG.actuators = {
     "panda_shoulder": ImplicitActuatorCfg(
@@ -144,5 +146,123 @@ FRANKA_ROBOTIQ_GRIPPER_CFG.actuators = {
     ),
 }
 
+PANDA_OFFSET_ROBOTIQ_CFG = ArticulationCfg(
+    # spawn=sim_utils.UsdFileCfg(
+    #     usd_path=f"source/isaaclab_assets/gripper/panda_rf85_gripper/panda_rf85_gripper.usd",
+    #     activate_contact_sensors=True,
+    #     rigid_props=sim_utils.RigidBodyPropertiesCfg(
+    #         disable_gravity=True,
+    #         max_depenetration_velocity=5.0,
+    #     ),
+    #     articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+    #         enabled_self_collisions=True, solver_position_iteration_count=8, solver_velocity_iteration_count=2
+    #     ),
+    #     collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+    # ),
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=f"source/isaaclab_assets/isaaclab_assets/robots/Collected_panda_robotiq_v4/panda_robotiq_v4.usd",
+        activate_contact_sensors=True,
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            disable_gravity=True,
+            max_depenetration_velocity=5.0,
+        ),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=True, solver_position_iteration_count=8, solver_velocity_iteration_count=4
+        ),
+        collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+    ),
+    init_state=ArticulationCfg.InitialStateCfg(
+        joint_pos={
+            "panda_joint1": 0.0,
+            "panda_joint2": -0.569,
+            "panda_joint3": 0.0,
+            "panda_joint4": -2.810,
+            "panda_joint5": 0.0,
+            "panda_joint6": 3.037,
+            "panda_joint7": 0.741,
+            "finger_joint": 0.0,
+            ".*_inner_finger_joint": 0.0,
+            ".*_inner_finger_pad_joint": 0.0,
+            ".*_outer_.*_joint": 0.0,
 
-"""Configuration of Franka Emika Panda robot with Robotiq_2f_85 gripper."""
+        },
+    ),
+    
+    actuators={
+        "panda_shoulder": ImplicitActuatorCfg(
+            joint_names_expr=["panda_joint[1-4]"],
+            effort_limit_sim=87.0,
+            stiffness=4000.0,
+            damping=200.0,
+        ),
+        "panda_forearm": ImplicitActuatorCfg(
+            joint_names_expr=["panda_joint[5-7]"],
+            effort_limit_sim=12.0,
+            stiffness=2000.0,
+            damping=100.0,
+        ),
+        # "gripper_drive": ImplicitActuatorCfg(
+        #     joint_names_expr=["finger_joint"],  # "right_outer_knuckle_joint" is its mimic joint
+        #     effort_limit_sim=1650,
+        #     velocity_limit_sim=10.0,
+        #     stiffness=17,
+        #     damping=0.02,
+        # ),
+        # # enable the gripper to grasp in a parallel manner
+        # "gripper_finger": ImplicitActuatorCfg(
+        #     joint_names_expr=[".*_inner_finger_joint"],
+        #     effort_limit_sim=50,
+        #     velocity_limit_sim=10.0,
+        #     stiffness=0.2,
+        #     damping=0.001,
+        # ),
+        # # set PD to zero for passive joints in close-loop gripper
+        # "gripper_passive": ImplicitActuatorCfg(
+        #     joint_names_expr=[".*_inner_knuckle_joint", "right_outer_knuckle_joint"],
+        #     effort_limit_sim=1.0,
+        #     velocity_limit_sim=10.0,
+        #     stiffness=0.0,
+        #     damping=0.0,
+        # ),
+        # "gripper_drive": ImplicitActuatorCfg(
+        #     # Command all 4 main joints of the linkage
+        #     joint_names_expr=["finger_joint", "right_outer_knuckle_joint", ".*_inner_finger_joint"],
+        #     effort_limit_sim=1650,
+        #     velocity_limit_sim=10.0,
+        #     stiffness=500.0,  # Increased from 17
+        #     damping=10.0,     # Increased from 0.02
+        # ),
+        # # Keep the knuckles passive as they are just followers
+        # "gripper_passive": ImplicitActuatorCfg(
+        #     joint_names_expr=[".*_inner_finger_pad_joint"], 
+        #     effort_limit_sim=1.0,
+        #     velocity_limit_sim=10.0,
+        #     stiffness=0.0,
+        #     damping=0.0,
+        # ),
+        # "gripper_drive": ImplicitActuatorCfg(
+        #     joint_names_expr=["finger_joint", "right_outer_knuckle_joint"],
+        #     velocity_limit_sim=20.0,
+        #     effort_limit_sim=20.0,
+        #     stiffness=500.0,
+        #     damping=0.0,
+        # ),
+        "gripper": ImplicitActuatorCfg(
+            joint_names_expr=[
+                "left_inner_finger_joint",
+                "right_inner_finger_joint",
+                "left_outer_finger_joint",
+                "right_outer_finger_joint",
+                "finger_joint",
+                "right_outer_knuckle_joint",
+                "right_inner_finger_pad_joint",
+                "left_inner_finger_pad_joint"
+            ],
+            velocity_limit_sim=20.0,
+            effort_limit_sim=20.0,
+            stiffness=500.0,
+            damping=0.0,
+        ),
+    },
+    soft_joint_pos_limit_factor=0.8,
+)

@@ -109,6 +109,9 @@ from isaaclab.managers import DatasetExportMode
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
+from isaaclab.managers import RecorderTermCfg
+from isaaclab.managers.recorder_manager import RecorderTerm
+
 
 class RateLimiter:
     """Convenience class for enforcing rates in loops."""
@@ -142,6 +145,24 @@ class RateLimiter:
             while self.last_time < time.time():
                 self.last_time += self.sleep_duration
 
+class AbsoluteEEFActionRecorder(RecorderTerm):
+    """Records absolute EEF pose instead of relative action deltas."""
+
+    def record_pre_step(self, action: torch.Tensor) -> dict[str, torch.Tensor]:
+        # Pull absolute EEF pose from the frame transformer
+        ee_frame = self._env.scene["ee_frame"]
+        ee_pos_w = ee_frame.data.target_pos_w[:, 0, :]
+        ee_quat_w = ee_frame.data.target_quat_w[:, 0, :]
+
+        # Robot-root-relative position
+        robot_root_pos = self._env.scene["robot"].data.root_pos_w
+        ee_pos_local = ee_pos_w - robot_root_pos
+
+        # Gripper from original action
+        gripper = action[:, -1:]
+
+        abs_action = torch.cat([ee_pos_local, ee_quat_w, gripper], dim=-1)
+        return {"actions": abs_action}
 
 def setup_output_directories() -> tuple[str, str]:
     """Set up output directories for saving demonstrations.

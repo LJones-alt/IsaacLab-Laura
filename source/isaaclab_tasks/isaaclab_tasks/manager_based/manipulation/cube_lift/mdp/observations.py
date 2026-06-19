@@ -175,10 +175,15 @@ def ee_frame_quat(env: ManagerBasedRLEnv, ee_frame_cfg: SceneEntityCfg = SceneEn
 
 def gripper_pos(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     robot: Articulation = env.scene[robot_cfg.name]
-    finger_joint_1 = robot.data.joint_pos[:, -1].clone().unsqueeze(1)
-    finger_joint_2 = -1 * robot.data.joint_pos[:, -2].clone().unsqueeze(1)
-
-    return torch.cat((finger_joint_1, finger_joint_2), dim=1)
+    # Handle custom robots where gripper joints might not be the last two
+    # For Robotiq on Franka, we use the finger_joint position
+    if robot.data.joint_pos.shape[1] >= 2:
+        finger_joint_1 = robot.data.joint_pos[:, -1].clone().unsqueeze(1)
+        finger_joint_2 = -1 * robot.data.joint_pos[:, -2].clone().unsqueeze(1)
+        return torch.cat((finger_joint_1, finger_joint_2), dim=1)
+    else:
+        # Fallback for single joint grippers
+        return robot.data.joint_pos[:, -1].clone().unsqueeze(1).repeat(1, 2)
 
 def object_near_goal(
     env: ManagerBasedRLEnv,

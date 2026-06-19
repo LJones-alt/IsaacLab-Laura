@@ -66,6 +66,7 @@ import gymnasium as gym
 import numpy as np
 import random
 import torch
+import torch.nn.functional as F
 
 import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.torch_utils as TorchUtils
@@ -95,7 +96,46 @@ def get_observation_horizon(policy):
     return 2
 
 
-def prepare_obs_for_diffusion(obs_dict, obs_history):
+def process_obs(obs_dict, expected_shapes):
+    """Process observations to match expected shapes by the policy.
+    
+    Handles:
+    - Resizing images to match expected resolution while keeping HWC format
+    """
+    processed = {}
+    for k, v in obs_dict.items():
+        if k not in expected_shapes:
+            continue
+            
+        expected_shape = expected_shapes[k]
+        
+        # If it has a batch dimension [1, ...], squeeze it
+        if v.ndim > len(expected_shape):
+            v = v.squeeze(0)
+            
+        # Handle images (3D tensors with channels in last dim)
+        if v.ndim == 3 and v.shape[-1] == 3:
+            # Isaac Lab: (H, W, C). Target resolution is (expected_shape[1], expected_shape[2])
+            target_res = (expected_shape[1], expected_shape[2])
+            
+            # Resize if dimensions don't match
+            if v.shape[:2] != target_res:
+                # Interpolate expects 4D input: (B, C, H, W)
+                v_float = v.permute(2, 0, 1).unsqueeze(0).float()
+                v_resized = F.interpolate(
+                    v_float, size=target_res, mode="bilinear", align_corners=False
+                )
+                # Permute back to (H, W, C) for robomimic internal processing
+                v = v_resized.squeeze(0).permute(1, 2, 0)
+                # Convert back to original dtype if it was uint8
+                if obs_dict[k].dtype == torch.uint8:
+                    v = v.to(torch.uint8)
+        
+        processed[k] = v
+    return processed
+
+
+def prepare_obs_for_diffusion(obs_dict, obs_history, expected_shapes):
     """Prepare observations for diffusion policy inference.
     
     Diffusion policy expects observations with shape [B, T, D] where:
@@ -106,23 +146,19 @@ def prepare_obs_for_diffusion(obs_dict, obs_history):
     Args:
         obs_dict: Current observation dictionary from environment
         obs_history: Deque of past observations
+        expected_shapes: Dictionary of expected shapes from policy
         
     Returns:
         Stacked observation dictionary with temporal dimension
     """
-    # Store current observation (without batch dimension)
-    current_obs = {}
-    for k in obs_dict:
-        if obs_dict[k].dim() > 1:
-            current_obs[k] = obs_dict[k].squeeze(0)
-        else:
-            current_obs[k] = obs_dict[k]
+    # Process current observation to match expected format
+    current_obs = process_obs(obs_dict, expected_shapes)
     
     obs_history.append(current_obs)
     
     # Stack observations along temporal dimension: [T, D] -> [1, T, D]
     stacked_obs = {}
-    for k in obs_dict:
+    for k in current_obs:
         obs_list = [obs_history[i][k] for i in range(len(obs_history))]
         stacked = torch.stack(obs_list, dim=0).unsqueeze(0)  # [1, T, D]
         stacked_obs[k] = stacked
@@ -166,28 +202,17 @@ def rollout(policy, env, success_term, horizon, device):
               f"min={img.min().item():.3f}, max={img.max().item():.3f}")
     
     # Initialize history with first observation (repeated to fill the queue)
-    # Filter observations to only include keys the policy was trained on
-    filtered_first_obs_dict = {k: v for k, v in obs_dict["policy"].items() if k in policy.policy.obs_shapes}
+    # Process and filter observations to match policy expectations
     
-    first_obs = {}
-    for k in filtered_first_obs_dict:
-        if filtered_first_obs_dict[k].dim() > 1:
-            first_obs[k] = filtered_first_obs_dict[k].squeeze(0)
-        else:
-            first_obs[k] = filtered_first_obs_dict[k]
+    first_obs = process_obs(obs_dict["policy"], policy.policy.obs_shapes)
     
     # Fill history with copies of first observation
     for _ in range(observation_horizon):
         obs_history.append(copy.deepcopy(first_obs))
 
-
     for i in range(horizon):
-        # Filter observations to only include keys the policy was trained on
-        # robomimic handles image processing internally (HWC uint8 -> normalization)
-        filtered_obs_dict = {k: v for k, v in obs_dict["policy"].items() if k in policy.policy.obs_shapes}
-
         # Stack temporally for diffusion policy: history gives [1, T, D] tensors
-        obs = prepare_obs_for_diffusion(filtered_obs_dict, obs_history)
+        obs = prepare_obs_for_diffusion(obs_dict["policy"], obs_history, policy.policy.obs_shapes)
 
         traj["obs"].append(obs)
 

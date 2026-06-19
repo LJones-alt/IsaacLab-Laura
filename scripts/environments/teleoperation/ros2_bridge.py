@@ -17,8 +17,8 @@ class ROS2Bridge(Node):
 
         # ROS2 Communication
         self._target_pub = self.create_publisher(PoseStamped, '/cartesian_target', 10)
-        self._joint_target_pub = self.create_publisher(JointState, '/action_desired_joint', 10)
-        self._action_client = ActionClient(self, Move, 'fr3_gripper/franka_gripper/move')
+        self._joint_target_pub = self.create_publisher(JointState, '/goal_joint_states', 10)
+        self._action_client = ActionClient(self, Move, '/franka_gripper/move')
         self._real_pose_sub = self.create_subscription(PoseStamped, '/franka_robot_state_broadcaster/current_pose', self._real_pose_callback, 10)
         self._joint_sub = self.create_subscription(JointState, '/joint_states', self._joint_callback, 10)
 
@@ -63,19 +63,48 @@ class ROS2Bridge(Node):
         self._target_pub.publish(msg)
         self.get_logger().info(f"Published Cartesian Target: {data[0:3]}", throttle_duration_sec=0.5)
 
+    # def publish_joints(self, positions):
+    #     if len(positions) < 7: return
+    #     msg = JointState()
+    #     msg.header.stamp = self.get_clock().now().to_msg()
+    #     msg.header.frame_id = 'base'
+    #     msg.name = [f'fr3_joint{i}' for i in range(1, 8)]
+    #     msg.position = [float(p) for p in positions[:7]]
+    #     # msg.velocity = [0.0] * 7
+    #     # msg.effort = [0.0] * 7
+    #     self._joint_target_pub.publish(msg)
+    #     # Throttled debug log (every 1s)
+    #     self.get_logger().info(f"Published Joint Target: {[round(p, 3) for p in msg.position]}", throttle_duration_sec=0.2)
     def publish_joints(self, positions):
-        if len(positions) < 7: return
+        # Ensure we have the full 7-DOF array from Isaac
+        if len(positions) < 7: 
+            return
+        positions[3] = max(positions[3], -3.00)
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'base'
-        msg.name = [f'fr3_joint{i}' for i in range(1, 8)]
-        msg.position = [float(p) for p in positions[:7]]
-        msg.velocity = [0.0] * 7
-        msg.effort = [0.0] * 7
-        self._joint_target_pub.publish(msg)
-        # Throttled debug log (every 1s)
-        self.get_logger().info(f"Published Joint Target: {[round(p, 3) for p in msg.position]}", throttle_duration_sec=0.2)
+        msg.header.frame_id = 'base_link' # Changed 'base' to 'base_link' to match standard Franka frames
 
+        # Define the names in the EXACT order Isaac gives them to you (1 through 7)
+        msg.name = [
+            'fr3_joint1', 
+            'fr3_joint2', 
+            'fr3_joint3', 
+            'fr3_joint4', 
+            'fr3_joint5', 
+            'fr3_joint6', 
+            'fr3_joint7'
+        ]
+        
+        # Map the values in that same order
+        msg.position = [float(p) for p in positions[:7]]
+
+        self._joint_target_pub.publish(msg)
+        
+        # Debug log
+        self.get_logger().info(
+            f"Published Joint Target (J1-J7): {[round(p, 3) for p in msg.position]}", 
+            throttle_duration_sec=0.01
+        )
     def send_gripper(self, width):
         self.get_logger().info(f"Sending Gripper Goal: width={width}")
         goal_msg = Move.Goal()

@@ -1,13 +1,13 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "vial_insert",
+        "name": "visuomotor_place_BC",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": true,
             "log_tb": true,
             "log_wandb": true,
-            "wandb_proj_name": "vial_insert_1.0_mix"
+            "wandb_proj_name": "visuomotor_place_BC"
         },
         "save": {
             "enabled": true,
@@ -20,7 +20,7 @@
         },
         "epoch_every_n_steps": 100,
         "validation_epoch_every_n_steps": 10,
-        "env": "Dev-IK-Rel-Insert-v0",
+        "env": "Dev-IK-Rel-Place-vision-v0",
         "additional_envs": null,
         "render": false,
         "render_video": true,
@@ -37,7 +37,7 @@
     "train": {
         "data": null,
         "output_dir": "/workspace/isaaclab/docs/training_runs/bc_rnn",
-        "num_data_workers": 4,
+        "num_data_workers": 0,
         "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_normalize_obs": false,
@@ -110,7 +110,10 @@
                     "joint_vel",
                     "actions"
                 ],
-                "rgb": [],
+                "rgb": [
+                    "table_cam",
+                    "wrist_cam"
+                ],
                 "depth": [],
                 "scan": []
             }

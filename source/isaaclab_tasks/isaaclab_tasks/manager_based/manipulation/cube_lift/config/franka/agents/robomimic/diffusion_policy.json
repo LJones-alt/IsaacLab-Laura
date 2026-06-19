@@ -1,13 +1,13 @@
 {
     "algo_name": "diffusion_policy",
     "experiment": {
-        "name": "diffusion_policy_place",
+        "name": "diffusion_policy_additional_obs",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": true,
             "log_tb": true,
             "log_wandb": true,
-            "wandb_proj_name": "pick_place_diffusion"
+            "wandb_proj_name": "pick_place_diffusion_vision"
         },
         "save": {
             "enabled": true,
@@ -20,7 +20,7 @@
         },
         "epoch_every_n_steps": 100,
         "validation_epoch_every_n_steps": 10,
-        "env": "Dev-IK-Rel-Place-v0",
+        "env": "Dev-IK-Rel-Place-vision-v0",
         "additional_envs": null,
         "render": false,
         "render_video": false,
@@ -29,21 +29,21 @@
         "rollout": {
             "enabled": false,
             "terminate_on_success": true,
-            "n": 50,
-            "horizon": 400,
+            "n": 10,
+            "horizon": 500,
             "rate": 50
         }
     },
     "train": {
         "data": null,
-        "output_dir": "/training_runs/diffusion_policy",
-        "num_data_workers": 4,
+        "output_dir": "docs/training_runs/diffusion_policy_vision",
+        "num_data_workers": 0,
         "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": "valid",
-        "seq_length": 16,
+        "seq_length": 28,
         "pad_seq_length": true,
         "frame_stack": 2,
         "pad_frame_stack": true,
@@ -57,7 +57,7 @@
             "actions"
         ],
         "cuda": true,
-        "batch_size": 128,
+        "batch_size": 256,
         "num_epochs": 1000,
         "seed": 101
     },
@@ -75,38 +75,42 @@
                     "num_cycles": 0.5
                 },
                 "regularization": {
-                    "L2": 0.0001
+                    "L2": 0.001
                 }
             }
         },
         "horizon": {
-            "observation_horizon": 2,
-            "action_horizon": 4,
+            "observation_horizon": 4,
+            "action_horizon": 6,
             "prediction_horizon": 16
         },
         "unet": {
             "enabled": true,
             "diffusion_step_embed_dim": 256,
-            "down_dims": [256, 512, 1024],
+            "down_dims": [
+                256,
+                512,
+                1024
+            ],
             "kernel_size": 5,
             "n_groups": 8
         },
         "ema": {
             "enabled": true,
-            "power": 0.75
+            "power": 0.9
         },
         "ddpm": {
             "enabled": true,
-            "num_train_timesteps": 100,
+            "num_train_timesteps": 20,
             "num_inference_timesteps": 100,
             "beta_schedule": "squaredcos_cap_v2",
             "clip_sample": true,
             "prediction_type": "epsilon"
         },
         "ddim": {
-            "enabled": false,
-            "num_train_timesteps": 100,
-            "num_inference_timesteps": 10,
+            "enabled": true,
+            "num_train_timesteps": 20,
+            "num_inference_timesteps": 20,
             "beta_schedule": "squaredcos_cap_v2",
             "clip_sample": true,
             "set_alpha_to_one": true,
@@ -121,13 +125,14 @@
                     "eef_pos",
                     "eef_quat",
                     "gripper_pos",
+                    "actions",
                     "object_position",
-                    "target_object_position",
-                    "joint_pos",
-                    "joint_vel",
-                    "actions"
+                    "target_object_position"
                 ],
-                "rgb": [],
+                "rgb": [
+                    "table_cam",
+                    "wrist_cam"
+                ],
                 "depth": [],
                 "scan": []
             }

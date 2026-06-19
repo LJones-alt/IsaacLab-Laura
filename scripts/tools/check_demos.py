@@ -1,7 +1,7 @@
 import h5py
 import numpy as np
 
-f = h5py.File('/workspace/isaaclab/docs/place/glassware_stack_demos_split.hdf5', 'r')
+f = h5py.File('/workspace/isaaclab/docs/place_VM/vial_place_demos_generated.hdf5', 'r')
 
 # Analyze gripper action (dim 6) over normalized time
 demos = list(f['data'].keys())

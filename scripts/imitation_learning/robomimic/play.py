@@ -99,6 +99,10 @@ def rollout(policy, env, success_term, horizon, device):
         obs = {k: torch.squeeze(v) for k, v in obs_dict["policy"].items()
                if k in policy.policy.obs_shapes}
 
+        print(f"obs.keys(): {obs.keys()}")
+        print(f"[DEBUG] env obs : {obs_dict['policy'].keys()}")
+        print(f"[DEBUG] policy obs shapes : {policy.policy.obs_shapes}")
+      #  print(f"[DEBUG] policy obs : {obs}")
         # Compute actions
         actions = policy(obs)
 

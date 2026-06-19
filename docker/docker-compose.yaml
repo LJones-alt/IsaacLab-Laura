@@ -51,6 +51,9 @@ x-default-isaac-lab-volumes: &default-isaac-lab-volumes
   - type: bind
     source: ../tools
     target: ${DOCKER_ISAACLAB_PATH}/tools
+  - type: bind
+    source: ../ros2
+    target: ${DOCKER_ISAACLAB_PATH}/ros2
     # The effect of these volumes is twofold:
     # 1. Prevent root-owned files from flooding the _build and logs dir
     #    on the host machine
@@ -94,6 +97,7 @@ services:
     build:
       context: ../
       dockerfile: docker/Dockerfile.base
+      network: host
       args:
         - ISAACSIM_BASE_IMAGE_ARG=${ISAACSIM_BASE_IMAGE}
         - ISAACSIM_VERSION_ARG=${ISAACSIM_VERSION}
@@ -110,10 +114,11 @@ services:
     entrypoint: bash
     stdin_open: true
     tty: true
-    # devices:
-    # - /dev/hidraw0:/dev/hidraw0
-    # - /dev/hidraw1:/dev/hidraw1
-    # - /dev/hidraw2:/dev/hidraw2
+    devices:
+    - /dev/hidraw0:/dev/hidraw0
+    - /dev/hidraw1:/dev/hidraw1
+    - /dev/hidraw2:/dev/hidraw2
+    - /dev/hidraw3:/dev/hidraw3
 
   # This service adds a ROS2 Humble
   # installation on top of the base image
@@ -125,6 +130,7 @@ services:
     build:
       context: ../
       dockerfile: docker/Dockerfile.ros2
+      network: host
       args:
         # ROS2_APT_PACKAGE will default to NONE. This is to
         # avoid a warning message when building only the base profile
@@ -143,10 +149,11 @@ services:
     entrypoint: bash
     stdin_open: true
     tty: true
-    # devices:
-    # - /dev/hidraw0:/dev/hidraw0
-    # - /dev/hidraw1:/dev/hidraw1
-    # - /dev/hidraw2:/dev/hidraw2
+    devices:
+    - /dev/hidraw0:/dev/hidraw0
+    - /dev/hidraw1:/dev/hidraw1
+    - /dev/hidraw2:/dev/hidraw2
+    - /dev/hidraw3:/dev/hidraw3
 
 volumes:
   # isaac-sim
