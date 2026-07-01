@@ -244,7 +244,7 @@ def rollout(policy, env: gym.Env, success_term, horizon: int, device: torch.devi
         # Sum total features to check against 402
         total_feats = 0
         for k, v in obs.items():
-            print(f"  {k}: shape={v.shape}, ndim={v.ndim}")
+            #print(f"  {k}: shape={v.shape}, ndim={v.ndim}")
             # For Diffusion [1, T, D], we care about D. For images, D is flatten.
             if v.ndim == 3: # [1, T, D]
                 total_feats += v.shape[-1]

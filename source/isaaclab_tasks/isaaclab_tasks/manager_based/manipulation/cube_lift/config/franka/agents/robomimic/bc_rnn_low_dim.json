@@ -1,7 +1,7 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "visuomotor_place_BC",
+        "name": "visuomotor_place_vial_BC",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": true,
@@ -20,7 +20,7 @@
         },
         "epoch_every_n_steps": 100,
         "validation_epoch_every_n_steps": 10,
-        "env": "Dev-IK-Rel-Place-vision-v0",
+        "env": "Dev-IK-Rel-lift-vismot-v0",
         "additional_envs": null,
         "render": false,
         "render_video": true,

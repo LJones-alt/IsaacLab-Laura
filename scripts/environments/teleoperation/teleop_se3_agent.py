@@ -247,14 +247,17 @@ def main() -> None:
                 if teleoperation_active:
                     # process actions
                     actions = action.repeat(env.num_envs, 1).to(env.device)
+                    # if torch.any(torch.abs(actions) > 0.001):
+                    #     print(f"Non-zero action commanded: {actions}")
                     obs, reward, terminated, truncated, info = env.step(actions)
+                    policy_obs = obs['policy']
                     # apply actions (relative as intended by the environment)
                     # print(f"gripper actions: {actions[:,-1]}")
                     # ee_pos = env.scene["ee_frame"].data.target_pos_w[:, 0, :]      # (N, 3)
                     # ee_quat = env.scene["ee_frame"].data.target_quat_w[:, 0, :]    # (N, 4)
                     # gripper = actions[:, -1:]
                     # absolute_action = torch.cat([ee_pos, ee_quat, gripper], dim=-1)
-                    
+                   # print(f"joint positions: {policy_obs['joint_pos']}, gripper pos {policy_obs['eef_pos']}, gripper quat {policy_obs['eef_quat']}")
                     #env.step(actions)
                 else:
                     env.sim.render()
@@ -264,7 +267,8 @@ def main() -> None:
                     should_reset_recording_instance = False
                     print("Environment reset complete")
         except Exception as e:
-            omni.log.error(f"Error during simulation step: {e}")
+            import traceback
+            omni.log.error(f"Error during simulation step: {e}\n{traceback.format_exc()}")
             break
 
     # close the simulator

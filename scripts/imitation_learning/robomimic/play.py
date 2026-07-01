@@ -33,7 +33,7 @@ parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--checkpoint", type=str, default=None, help="Pytorch model checkpoint to load.")
 parser.add_argument("--horizon", type=int, default=800, help="Step horizon of each rollout.")
 parser.add_argument("--num_rollouts", type=int, default=1, help="Number of rollouts.")
-parser.add_argument("--seed", type=int, default=0, help="Random seed.")
+parser.add_argument("--seed", type=int, default=101, help="Random seed.")
 parser.add_argument(
     "--norm_factor_min", type=float, default=None, help="Optional: minimum value of the normalization factor."
 )
@@ -99,10 +99,10 @@ def rollout(policy, env, success_term, horizon, device):
         obs = {k: torch.squeeze(v) for k, v in obs_dict["policy"].items()
                if k in policy.policy.obs_shapes}
 
-        print(f"obs.keys(): {obs.keys()}")
-        print(f"[DEBUG] env obs : {obs_dict['policy'].keys()}")
-        print(f"[DEBUG] policy obs shapes : {policy.policy.obs_shapes}")
-      #  print(f"[DEBUG] policy obs : {obs}")
+    #     print(f"obs.keys(): {obs.keys()}")
+    #     print(f"[DEBUG] env obs : {obs_dict['policy'].keys()}")
+    #     print(f"[DEBUG] policy obs shapes : {policy.policy.obs_shapes}")
+    #   #  print(f"[DEBUG] policy obs : {obs}")
         # Compute actions
         actions = policy(obs)
 

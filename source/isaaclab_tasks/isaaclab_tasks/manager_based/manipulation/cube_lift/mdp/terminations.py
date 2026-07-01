@@ -114,24 +114,17 @@ def object_stacked_upright(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = S
         xy_threshold, height_threshold, height_diff, gripper_open_val)
     stacked_upright = stacked & upright_good
     gripper_joint_ids, _ = robot.find_joints(env.cfg.gripper_joint_names)
-    stacked = torch.logical_and(
-        torch.isclose(
-            robot.data.joint_pos[:, gripper_joint_ids[0]],
-            torch.tensor(env.cfg.gripper_open_val, dtype=torch.float32).to(env.device),
-            atol=atol,
-            rtol=rtol,
-        ),
-        stacked_upright,
-    )
-    stacked = torch.logical_and(
-        torch.isclose(
-            robot.data.joint_pos[:, gripper_joint_ids[1]],
-            torch.tensor(env.cfg.gripper_open_val, dtype=torch.float32).to(env.device),
-            atol=atol,
-            rtol=rtol,
-        ),
-        stacked,
-    )
+    for joint_id in gripper_joint_ids:
+        stacked_upright = torch.logical_and(
+            torch.isclose(
+                robot.data.joint_pos[:, joint_id],
+                torch.tensor(env.cfg.gripper_open_val, dtype=torch.float32).to(env.device),
+                atol=atol,
+                rtol=rtol,
+            ),
+            stacked_upright,
+        )
+    stacked = stacked_upright
 
     #if logging:
         #rising = log(env, "object_stacked_upright", stacked_upright, f"Stacked (upright ≤ {upright_good_deg}°)")
@@ -190,24 +183,17 @@ def object_inserted_upright(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = 
     stacked_upright = stacked & upright_good
     #print(f"For DEBUG : STACKED STATUS : {stacked_upright}, {stacked}, {upright_good} ")
     gripper_joint_ids, _ = robot.find_joints(env.cfg.gripper_joint_names)
-    stacked = torch.logical_and(
-        torch.isclose(
-            robot.data.joint_pos[:, gripper_joint_ids[0]],
-            torch.tensor(env.cfg.gripper_open_val, dtype=torch.float32).to(env.device),
-            atol=atol,
-            rtol=rtol,
-        ),
-        stacked_upright,
-    )
-    stacked = torch.logical_and(
-        torch.isclose(
-            robot.data.joint_pos[:, gripper_joint_ids[1]],
-            torch.tensor(env.cfg.gripper_open_val, dtype=torch.float32).to(env.device),
-            atol=atol,
-            rtol=rtol,
-        ),
-        stacked_upright,
-    )
+    for joint_id in gripper_joint_ids:
+        stacked_upright = torch.logical_and(
+            torch.isclose(
+                robot.data.joint_pos[:, joint_id],
+                torch.tensor(env.cfg.gripper_open_val, dtype=torch.float32).to(env.device),
+                atol=atol,
+                rtol=rtol,
+            ),
+            stacked_upright,
+        )
+    stacked = stacked_upright
 
     #if logging:
         #rising = log(env, "object_stacked_upright", stacked_upright, f"Stacked (upright ≤ {upright_good_deg}°)")
