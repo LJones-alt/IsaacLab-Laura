@@ -111,7 +111,7 @@ from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
 from isaaclab.managers import RecorderTermCfg
 from isaaclab.managers.recorder_manager import RecorderTerm
-
+from .scripts.imitation_learning.robomimic.test_controller import TestController
 
 class RateLimiter:
     """Convenience class for enforcing rates in loops."""
@@ -293,6 +293,8 @@ def setup_teleop_device(callbacks: dict[str, Callable]) -> object:
                 teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.2, rot_sensitivity=0.5))
             elif args_cli.teleop_device.lower() == "spacemouse":
                 teleop_interface = Se3SpaceMouse(Se3SpaceMouseCfg(pos_sensitivity=0.2, rot_sensitivity=0.5))
+            elif args_cli.teleop_device.lower() == "stateMachine":
+                teleop_interface = TaskController()
             else:
                 omni.log.error(f"Unsupported teleop device: {args_cli.teleop_device}")
                 omni.log.error("Supported devices: keyboard, spacemouse, handtracking")

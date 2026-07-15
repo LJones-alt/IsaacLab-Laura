@@ -73,6 +73,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 if args_cli.real_robot:
     from isaaclab.sim2real.bridgeclient import BridgeClient
 import time
+from isaaclab.utils.forwards_kinematics import ForwardsDynamics
 
 
 def draw_walls(draw_interface, x_min, x_max, y_min, y_max, z_min, z_max):
@@ -239,10 +240,17 @@ def main() -> None:
                     eef_pos = obs_dict["eef_pos"] # (num_envs, 3)
                     eef_quat= obs_dict["eef_quat"] # (num_envs, 4)
                     # Modify the position delta (first 3 components of action)
+
                     for i in range(env.num_envs):
                         nominal_velocity = actions[i, 0:3]
                         current_pos = eef_pos[i]
                         
+                        # lets check my dynamics model here - just 1st environment
+                        fk = ForwardsDynamics()
+                        fk.get_fk_solution(obs_dict['abs_joint_pos'][0])
+                        # print(f"joint pos from sim : {obs_dict['joint_pos'][0]}")
+                        # print(f"FK from fk : {fk.get_fk_solution(obs_dict['joint_pos'][0])}")
+                        print(f"actual EE : {obs_dict['eef_pos'][0]}, {obs_dict['eef_quat'][0]}")
                         # We use torch.enable_grad() because APF needs gradients for repulsion
                         with torch.enable_grad():
                             safe_velocity = apf.compute_safe_velocity(
@@ -256,7 +264,7 @@ def main() -> None:
                         # applies APF safety constraints
                         actions[i, 0:3] = safe_velocity
 
-                        # for ros2 brideg : 
+                        # for ros2 bridge : 
                         abs_pos = eef_pos + actions[:, 0:3]
                         abs_quat_ros = torch.cat([eef_quat[:, 1:], eef_quat[:, 0:1]], dim=-1)
                         abs_pose_bridge = torch.cat([abs_pos, abs_quat_ros], dim=-1)

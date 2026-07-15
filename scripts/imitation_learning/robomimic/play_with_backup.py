@@ -35,7 +35,7 @@ parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
-parser.add_argument("--checkpoint", type=str, default=None, help="Pytorch model checkpoint to load.")
+#parser.add_argument("--checkpoint", type=str, default=None, help="Pytorch model checkpoint to load.")
 parser.add_argument("--horizon", type=int, default=2000, help="Step horizon of each rollout.")
 parser.add_argument("--num_rollouts", type=int, default=1, help="Number of rollouts.")
 parser.add_argument("--seed", type=int, default=101, help="Random seed.")
@@ -97,7 +97,7 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg, BinaryJointPositionActionCfg
 from isaaclab.envs.mdp.actions.binary_joint_actions import BinaryJointPositionAction
 from backup_controller_handler import BackupController
-
+from test_controller import TestController
 
 def rollout_ensemble(env, success_term, horizon, device):
     """Perform a single rollout of the policy in the environment.
@@ -118,12 +118,14 @@ def rollout_ensemble(env, success_term, horizon, device):
     # Set up recovery controller 
     
     
-    backup_controller  = BackupController(env, device, tasktype="insert_top")
+    #backup_controller  = BackupController(env, device, tasktype="new_place")
+    test_controller = TestController(device, env)
     state_guess = 0
     for i in range(horizon):
         
         
-        action, state_guess = backup_controller.get_controller_action(state_guess, 0)
+        #action, state_guess = backup_controller.get_controller_action(state_guess, 0)
+        action = test_controller.get_action()
        # print(f"state guess : {state_guess}")
         
         zero_action = torch.zeros(1, env.action_space.shape[1], device=device)
@@ -135,9 +137,14 @@ def rollout_ensemble(env, success_term, horizon, device):
         # check if we reached target (use absolute pos error)
         
        # print(f"[DEBUG] post-step pos_err (before update): {pos_err.item():.6f}")
-
+        if bool(success_term.func(env, **success_term.params)[0]):
+            backup_controller.reset()
+            return True
+        elif terminated or truncated:
+            backup_controller.reset()
+            return False
        
-    backup_controller.reset()
+    
           
 def main():
     """Run a trained policy from robomimic with Isaac Lab environment."""

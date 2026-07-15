@@ -21,6 +21,7 @@ from isaaclab.managers import ObservationGroupCfg as ObsGroup
 import math
 from isaaclab.managers import SceneEntityCfg
 from isaaclab_assets.glassware.glassware import ChemistryGlassware
+from isaaclab.markers.config import FRAME_MARKER_CFG 
 from isaaclab_tasks.manager_based.manipulation.cube_lift import mdp
 from isaaclab_tasks.manager_based.manipulation.cube_lift.mdp import franka_stack_events
 from isaaclab_tasks.manager_based.manipulation.cube_lift.lift_env_cfg import CubeEnvCfg
@@ -111,7 +112,7 @@ class EventCfg():
         func=mdp.reset_place_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.02, 0.02)},
+            "pose_range": {"x": (0,0), "y": (0,0), "z": (0.02, 0.02)},
             "velocity_range": {},
             "asset_cfg": SceneEntityCfg("object", body_names="object"),
             "asset2_cfg" : SceneEntityCfg("stirplate"),
@@ -129,6 +130,9 @@ class ObservationsCfg:
 
         actions = ObsTerm(func=mdp.last_action)
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
+        # for debugging 
+       # abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
+
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
         object_position = ObsTerm(func=mdp.object_position_in_robot_root_frame)
         #cube_positions = ObsTerm(func=mdp.cube_positions_in_world_frame)
@@ -143,7 +147,9 @@ class ObservationsCfg:
         wrist_cam = ObsTerm(
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("wrist_cam"), "data_type": "rgb", "normalize": False}
         )
-        #### for cosmos add the segmentation, normals and depth data
+
+
+        # for cosmos add the segmentation, normals and depth data
         table_cam_segmentation= ObsTerm(
             func = mdp.image,
             params = {
@@ -171,6 +177,11 @@ class ObservationsCfg:
             }
         )
 
+        ### debug obs
+
+
+        
+
         def __post_init__(self):
             self.enable_corruption = False
             self.concatenate_terms = False
@@ -186,7 +197,21 @@ class ObservationsCfg:
                 "object_cfg": SceneEntityCfg("object"),
             },
         )
-       
+        lift = ObsTerm(
+            func=mdp.is_object_lifted,
+            params={
+                "obj_cfg": SceneEntityCfg("object"),
+                "threshold" : 0.1
+            }
+        )
+        stacked = ObsTerm(
+            func=mdp.object_stacked,
+            params={
+                "robot_cfg": SceneEntityCfg("robot"),
+                "upper_object_cfg": SceneEntityCfg("object"),
+                "lower_object_cfg": SceneEntityCfg("scale"),
+            },
+        )
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -259,12 +284,28 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
             "class:UNLABELLED": (150, 150, 150, 255),
             "class:BACKGROUND": (200, 200, 200, 255),
         }
+
+        ## add some extra tables
+        self.scene.table2 = AssetBaseCfg(
+            prim_path="{ENV_REGEX_NS}/Table2",
+            init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0.75, 0], rot=[1.0, 0, 0, 0]),
+            #init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0], rot=[0.707, 0, 0, 0.707]),
+            spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/ThorlabsTable/table_instanceable.usd"),
+            #spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"),
+        )
+        self.scene.Table3 = AssetBaseCfg(
+            prim_path="{ENV_REGEX_NS}/Table3",
+            init_state=AssetBaseCfg.InitialStateCfg(pos=[0, -0.75, 0], rot=[1.0, 0, 0, 0]),
+            #init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0], rot=[0.707, 0, 0, 0.707]),
+            spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/ThorlabsTable/table_instanceable.usd"),
+            #spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"),
+        )
         
         # put the beaker on the stir plate
         glassware = ChemistryGlassware()
-        self.scene.stirplate = glassware.stirplate(pos=[0.5, 0.0, 0.01])
-        self.scene.scale = glassware.scale(pos=[0.3, -0.3, 0.01])
-        self.scene.object = glassware.capped_vial(pos=[0.5, 0.0, 0.01], scale =2.0, name="object")
+        self.scene.stirplate = glassware.IKAplate(pos=[0.1, 0.0, 0.01])
+        self.scene.scale = glassware.scale(pos=[0.1, -0.4, 0.01])
+        self.scene.object = glassware.beaker(pos=[0.2, 0.0, 0.01], name="object")
         self.scene.table_cam = CameraCfg(
             prim_path="{ENV_REGEX_NS}/table_cam",
             update_period=0.0,
@@ -274,34 +315,37 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
             colorize_semantic_segmentation=True,
             semantic_segmentation_mapping=SEMANTIC_MAPPING,
             spawn=sim_utils.PinholeCameraCfg(
-                focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 2)
+                focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 20)
             ),
             ### Where is this in the scene?
             offset=CameraCfg.OffsetCfg(
-                pos=(1.4, 0.0, 0.5), rot=(0.35355, -0.61237, -0.61237, 0.35355), convention="ros"
+                pos=(1.6, 0.0, 1.0), rot=(0.35355, -0.61237, -0.61237, 0.35355), convention="ros"
             ),
         )
         self.scene.wrist_cam = CameraCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/wrist_cam",
+            #prim_path="{ENV_REGEX_NS}/Robot/wrist_cam",
+            prim_path="{ENV_REGEX_NS}/Robot/franka_robotiq_2f_85_flattened/Gripper/Robotiq_2F_85/base_link/wrist_camera_flipped",
             update_period=0.0,
             height=84,
             width=84,
             data_types=["rgb", "distance_to_image_plane"],
-            spawn=sim_utils.PinholeCameraCfg(
-                focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 2)
-            ),
-            offset=CameraCfg.OffsetCfg(
-                pos=(0.13, 0.0, -0.15), rot=(-0.70614, 0.03701, 0.03701, -0.70614), convention="ros"
-            ),
+            # spawn=sim_utils.PinholeCameraCfg(
+            #     focal_length=2.4, focus_distance=28.0, horizontal_aperture=5.3, clipping_range=(0.1, 2)
+            # ),
+            spawn=None,
+            # offset=CameraCfg.OffsetCfg(
+            #     pos=(0.011, -0.031, 0.4), rot=(-0.4, 0.58, 0.57, -0.418), convention="ros"
+            # ),
         )
+        self.viewer.eye = (-1.5, -0.3, 1.0)
         self.rerender_on_reset = True
-        self.sim.render_settings = {
-            "rtx/renderMode": "PathTracing",
-            "rtx/pathtracing/spp": 1,
-            "rtx/pathtracing/totalSpp": 1,
-            "rtx/pathtracing/maxBounces": 4,
-            "rtx/hydra/enabled": True,
-        }
+        # self.sim.render_settings = {
+        #     "rtx/renderMode": "PathTracing",
+        #     "rtx/pathtracing/spp": 1,
+        #     "rtx/pathtracing/totalSpp": 1,
+        #     "rtx/pathtracing/maxBounces": 4,
+        #     "rtx/hydra/enabled": True,
+        # }
         self.sim.render.antialiasing_mode = "OFF"  # disable dlss
         # self.sim.dt=0.0002
         # self.sim.render_interval=4
@@ -410,11 +454,13 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         #         ),
         #     ],
         # )
+        custom_marker_cfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/FrameTransformer")
+        custom_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
 
         self.scene.ee_frame = FrameTransformerCfg(
             prim_path="{ENV_REGEX_NS}/Robot/franka_robotiq_2f_85_flattened/panda_link0",
             debug_vis=False,
-            #visualizer_cfg=_frame_marker_cfg,
+            visualizer_cfg=custom_marker_cfg,
             target_frames=[
                 FrameTransformerCfg.FrameCfg(
                     prim_path=f"{{ENV_REGEX_NS}}/Robot/franka_robotiq_2f_85_flattened/panda_link{i}",
@@ -429,7 +475,7 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
                 FrameTransformerCfg.FrameCfg(
                     prim_path="{ENV_REGEX_NS}/Robot/franka_robotiq_2f_85_flattened/Gripper/Robotiq_2F_85/base_link",
                     name="eef_frame",
-                    offset=OffsetCfg(pos=[0.0, 0.0, 0.22], rot=[0.5, -0.5, 0.5, -0.5]),
+                    offset=OffsetCfg(pos=[0.14, 0.0, 0.0], rot=[0.5, -0.5, 0.5, -0.5]),
                 ),
             ],
         )

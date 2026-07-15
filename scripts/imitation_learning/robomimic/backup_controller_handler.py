@@ -1,5 +1,5 @@
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
-from isaaclab.utils.math import subtract_frame_transforms, euler_xyz_from_quat, quat_mul
+from isaaclab.utils.math import subtract_frame_transforms, euler_xyz_from_quat, quat_mul, axis_angle_from_quat
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg, BinaryJointPositionActionCfg
 from isaaclab.envs.mdp.actions.binary_joint_actions import BinaryJointPositionAction
@@ -7,6 +7,7 @@ from backup_controller import BackupControllerSM
 from backup_controller_place import BackupControllerPlaceSM
 from backup_controller_insert import BackupControllerInsertSM
 from backup_controller_insert_top import BackupControllerInsertTopSM
+from backup_controller_place_new import BackupControllerPlaceSM_new
 import torch
 
 
@@ -46,6 +47,8 @@ class BackupController:
             case "insert_top":
                 ### check this quat
                 return BackupControllerInsertTopSM(dt=0.01*2, num_envs=self.num_envs, position_threshold=0.02, device='cuda', offset = torch.tensor([[-0.1, 0, 0.1]], device='cuda:0'), goal_quat = self.object_goal_rot, goal_pos= self.object_goal_pos)
+            case "new_place":
+                return BackupControllerPlaceSM_new(dt=0.01*2, num_envs=self.num_envs, position_threshold=0.02, device='cuda', offset = torch.tensor([[0, 0, 0.3]], device='cuda:0'), goal_quat = torch.tensor([[ 0.4821,  0.4953, -0.5114, -0.5106]], device='cuda:0') , goal_pos= self.object_goal_pos)
             case _:
                 raise ValueError(f"Unknown task type {self.tasktype} for backup controller")
 
@@ -64,6 +67,10 @@ class BackupController:
                 return self.env.unwrapped.scene["vialrack"].data.root_pose_w
             case "insert":
                 return self.env.unwrapped.scene["vialrack"].data.root_pose_w
+            case "new_place":
+                goal_pos = self.env.unwrapped.scene["scale"].data.root_pose_w
+                print(f"[DEBUG] Getting final goal pos for new_place task {goal_pos}")
+                return self.env.unwrapped.scene["scale"].data.root_pose_w
 
     def _get_goal_rot(self):
          match self.tasktype:
@@ -89,6 +96,10 @@ class BackupController:
             case "insert":
                 goal_rot = self.env.unwrapped.command_manager.get_command("object_pose")
                 return self.env.unwrapped.command_manager.get_command("object_pose")
+            case "new_place":
+                goal_rot = torch.tensor([[ 0.4821,  0.4953, -0.5114, -0.5106]], device='cuda:0')
+                print(f"[DEBUG] Getting goal quat for new_place task {goal_rot}")
+                return goal_rot
 
     def reset(self):
         self.backup_controller.reset_idx()
@@ -102,7 +113,7 @@ class BackupController:
     def _get_rest_pos(self):
         rest_pos = torch.tensor([[0.5206, 0.0096, 0.3751]], device=self.device)
         ee_recovery_rot = torch.tensor([[ 0.6664,  0.0360,  0.7414, -0.0705]], device=self.device)
-        print(f"recovery rot : {ee_recovery_rot}")
+        print(f"default recovery rot : {ee_recovery_rot}")
         # lets change this into the 6 element tensor they are expecting 
         roll,pitch,yaw = euler_xyz_from_quat(ee_recovery_rot)
         rest_pos = torch.cat([rest_pos, ee_recovery_rot], dim =-1)
@@ -113,12 +124,21 @@ class BackupController:
             rest_rot = torch.tensor([[ 0, 1, 0, 0]], device=self.device)
             roll,pitch,yaw = euler_xyz_from_quat(rest_rot)
             rest_pos = torch.cat([rest_pos,rest_rot], dim =-1)
-        print(f"Rest pos {rest_pos}")
+        elif self.tasktype == "new_place":
+            print(f"[DEBUG] new place task type")
+            rest_pos = torch.tensor([[ 0.6226, -0.0621,  0.3555]], device=self.device)
+            rest_rot = torch.tensor([[0.4821,  0.4953, -0.5114, -0.5106]], device=self.device)
+            roll,pitch,yaw = euler_xyz_from_quat(rest_rot)
+            rest_pos = torch.cat([rest_pos,rest_rot], dim =-1)
+        print(f"[DEBUG] Rest pos {rest_pos}")
         print(f"rpy : {roll}, {pitch}, {yaw}")
         return rest_pos
     
     def _setup_robot(self):
-        robot_entity_cfg = SceneEntityCfg("robot", joint_names=["panda_joint.*"], body_names=["panda_hand"])
+        if self.tasktype =="new_place":
+            robot_entity_cfg = SceneEntityCfg("robot", joint_names=["panda_joint.*"], body_names=["base_link"])
+        else:
+            robot_entity_cfg = SceneEntityCfg("robot", joint_names=["panda_joint.*"], body_names=["panda_hand"])
         robot_entity_cfg.resolve(self.env.unwrapped.scene)
         if self.robot.is_fixed_base:
             ee_jacobi_idx = robot_entity_cfg.body_ids[0] - 1
@@ -159,13 +179,12 @@ class BackupController:
         q_cur_conj = torch.cat([ee_quat_b[:, :1], -ee_quat_b[:, 1:]], dim=-1)
         # compute relative quaternion q_rel = q_target * q_cur_conj
         delta_q = quat_mul(target_quat_b, q_cur_conj)  # uses imported quat_mul
-        # convert delta quaternion to RPY (XYZ extrinsic)
-        r, p, y = euler_xyz_from_quat(delta_q, wrap_to_2pi=False)  # each shape (N,)
-        delta_rpy = torch.stack([r, p, y], dim=-1)  # [N,3]
-        delta_rpy = self.rot_gain * delta_rpy
-        delta_rpy = torch.clamp(delta_rpy, min=-self.rot_clamp, max=self.rot_clamp)
-        # --- build controller command: [dx,dy,dz, droll,dpitch,dyaw] ---
-        ee_goal = torch.cat([delta_pos, delta_rpy], dim=-1)  # [N,6]
+        # convert delta quaternion to axis-angle (Differential IK expects axis-angle)
+        delta_axis_angle = axis_angle_from_quat(delta_q)
+        delta_rot_action = self.rot_gain * delta_axis_angle
+        delta_rot_action = torch.clamp(delta_rot_action, min=-self.rot_clamp, max=self.rot_clamp)
+        # --- build controller command: [dx,dy,dz, dax,day,daz] ---
+        ee_goal = torch.cat([delta_pos, delta_rot_action], dim=-1)  # [N,6]
 
         action=torch.cat([ee_goal, gripper.unsqueeze(0)], dim=-1)
         return action, state_guess

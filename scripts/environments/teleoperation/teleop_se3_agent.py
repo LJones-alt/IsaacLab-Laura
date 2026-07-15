@@ -64,13 +64,41 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
-
+from isaacsim.util.debug_draw import _debug_draw
 # --- UDP Bridge imports ---
 import socket
 import json
 import time
 import numpy as np
 
+def draw_walls(draw_interface, x_min, x_max, y_min, y_max, z_min, z_max):
+    """Draws a wireframe box representing the APF boundaries."""
+    # Define the 8 corners of the box
+    corners = [
+        [x_min, y_min, z_min], [x_max, y_min, z_min],
+        [x_max, y_max, z_min], [x_min, y_max, z_min],
+        [x_min, y_min, z_max], [x_max, y_min, z_max],
+        [x_max, y_max, z_max], [x_min, y_max, z_max]
+    ]
+    
+    # Define the 12 edges (pairs of corner indices)
+    edges = [
+        (0, 1), (1, 2), (2, 3), (3, 0), # Bottom square
+        (4, 5), (5, 6), (6, 7), (7, 4), # Top square
+        (0, 4), (1, 5), (2, 6), (3, 7)  # Vertical pillars
+    ]
+    
+    point_list_1 = []
+    point_list_2 = []
+    for start, end in edges:
+        point_list_1.append(corners[start])
+        point_list_2.append(corners[end])
+        
+    # Draw lines (Color is RGBA: red)
+    colors = [[1.0, 0.0, 0.0, 1.0]] * len(point_list_1)
+    sizes = [2.0] * len(point_list_1)
+    
+    draw_interface.draw_lines(point_list_1, point_list_2, colors, sizes)
 
 
 def main() -> None:
@@ -115,6 +143,16 @@ def main() -> None:
         omni.log.error(f"Failed to create environment: {e}")
         simulation_app.close()
         return
+     # Define walls
+    x_min=-0.2
+    x_max=0.40
+    y_min=-0.73
+    y_max=0.73 
+    z_min=0.0 
+    z_max=0.9
+    draw_interface = _debug_draw.acquire_debug_draw_interface()
+    draw_walls(draw_interface, x_min, x_max, y_min, y_max, z_min, z_max )
+
 
     # Flags for controlling teleoperation flow
     should_reset_recording_instance = False
@@ -253,8 +291,12 @@ def main() -> None:
                     policy_obs = obs['policy']
                     # apply actions (relative as intended by the environment)
                     # print(f"gripper actions: {actions[:,-1]}")
-                    # ee_pos = env.scene["ee_frame"].data.target_pos_w[:, 0, :]      # (N, 3)
-                    # ee_quat = env.scene["ee_frame"].data.target_quat_w[:, 0, :]    # (N, 4)
+                    ee_pos = policy_obs['eef_pos']      # (N, 3)
+                    ee_quat = policy_obs['eef_quat']    # (N, 4)
+                    object_pos = policy_obs['object_position']
+
+                    print(f"EE Pos: {ee_pos}, EE Quat: {ee_quat}, \nOb Pos: {object_pos}")
+                    
                     # gripper = actions[:, -1:]
                     # absolute_action = torch.cat([ee_pos, ee_quat, gripper], dim=-1)
                    # print(f"joint positions: {policy_obs['joint_pos']}, gripper pos {policy_obs['eef_pos']}, gripper quat {policy_obs['eef_quat']}")

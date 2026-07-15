@@ -1,7 +1,7 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "visuomotor_place_vial_BC",
+        "name": "visuomotor_place_vial_BC_enoder",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": true,
@@ -54,8 +54,8 @@
         ],
         "goal_mode": null,
         "cuda": true,
-        "batch_size": 100,
-        "num_epochs": 1500,
+        "batch_size": 128,
+        "num_epochs": 1000,
         "seed": 101
     },
     "algo": {
@@ -116,6 +116,34 @@
                 ],
                 "depth": [],
                 "scan": []
+            }
+        },
+        "encoder": {
+            "low_dim": {
+                "core_class": null,
+                "core_kwargs": {},
+                "obs_randomizer_class": null,
+                "obs_randomizer_kwargs": {}
+            },
+            "rgb": {
+                "core_class": "VisualCore",
+                "core_kwargs": {
+                    "feature_dimension": 64,
+                    "backbone_class": "ResNet18Conv",
+                    "backbone_kwargs": {
+                        "pretrained": false,
+                        "input_coord_conv": false
+                    },
+                    "pool_class": "SpatialSoftmax",
+                    "pool_kwargs": {
+                        "num_kp": 32,
+                        "learnable_temperature": false,
+                        "temperature": 1.0,
+                        "noise_std": 0.0
+                    }
+                },
+                "obs_randomizer_class": null,
+                "obs_randomizer_kwargs": {}
             }
         }
     }

@@ -159,8 +159,8 @@ class CubeMimicEnv(ManagerBasedRLMimicEnv):
         #signals["appr"] = subtask_terms["appr"][env_ids]
         signals["grasp"] = subtask_terms["grasp"][env_ids]
         #signals["stacked"] = subtask_terms["stacked"][env_ids]
-        #signals["lift"] = subtask_terms["lift"][env_ids]
-        signals["appr_goal"] = subtask_terms["appr_goal"][env_ids]
+        signals["lift"] = subtask_terms["lift"][env_ids]
+        #signals["appr_goal"] = subtask_terms["appr_goal"][env_ids]
         #signals["release_object"] = subtask_terms["release_object"][env_ids]
         # final subtask is placing cube on goal - signal needed when using --annotate_subtask_start_signals
         return signals

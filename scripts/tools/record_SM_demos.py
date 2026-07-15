@@ -1,8 +1,7 @@
-# Copyright (c) 2024-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
 """
 Script to record demonstrations with Isaac Lab environments using human teleoperation.
 
@@ -28,19 +27,12 @@ optional arguments:
 import argparse
 import contextlib
 
-# Third-party imports
-import gymnasium as gym
-import numpy as np
-import os
-import time
-import torch
-
 # Isaac Lab AppLauncher
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Record demonstrations for Isaac Lab environments.")
-parser.add_argument("--task", type=str, default=None, help="Name of the task.")
+parser.add_argument("--task", type=str, required=True, help="Name of the task.")
 parser.add_argument("--teleop_device", type=str, default="keyboard", help="Device for interacting with environment.")
 parser.add_argument(
     "--dataset_file", type=str, default="./datasets/dataset.hdf5", help="File path to export recorded demos."
@@ -55,22 +47,21 @@ parser.add_argument(
     default=10,
     help="Number of continuous steps with task success for concluding a demo as successful. Default is 10.",
 )
-parser.add_argument("--seed", type=int, default=101, help="Random seed.")
 parser.add_argument(
     "--enable_pinocchio",
     action="store_true",
     default=False,
     help="Enable Pinocchio.",
 )
-parser.add_argument(
-    "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
-)
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
+
+# Validate required arguments
+if args_cli.task is None:
+    parser.error("--task is required")
 
 app_launcher_args = vars(args_cli)
 
@@ -78,43 +69,52 @@ if args_cli.enable_pinocchio:
     # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
     # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
     import pinocchio  # noqa: F401
+if "handtracking" in args_cli.teleop_device.lower():
+    app_launcher_args["xr"] = True
 
 # launch the simulator
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+"""Rest everything follows."""
+
+
+# Third-party imports
+import gymnasium as gym
+import os
+import time
+import torch
+
 # Omniverse logger
 import omni.log
+import omni.ui as ui
 
-if not args_cli.headless:
-    import omni.ui as ui
-    from isaaclab_mimic.ui.instruction_display import InstructionDisplay, show_subtask_instructions
-    from isaaclab.envs.ui import EmptyWindow
-
+from isaaclab.devices import Se3Keyboard, Se3KeyboardCfg, Se3SpaceMouse, Se3SpaceMouseCfg
+from isaaclab.devices.openxr import remove_camera_configs
+from isaaclab.devices.teleop_device_factory import create_teleop_device
 
 import isaaclab_mimic.envs  # noqa: F401
 from isaaclab_mimic.ui.instruction_display import InstructionDisplay, show_subtask_instructions
 
 if args_cli.enable_pinocchio:
-    from isaaclab.devices.openxr.retargeters.humanoid.fourier.gr1t2_retargeter import GR1T2Retargeter
     import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 
-from isaaclab.devices.openxr.retargeters.manipulator import GripperRetargeter, Se3AbsRetargeter, Se3RelRetargeter
+from collections.abc import Callable
+
+from isaaclab.envs import DirectRLEnvCfg, ManagerBasedRLEnvCfg
 from isaaclab.envs.mdp.recorders.recorders_cfg import ActionStateRecorderManagerCfg
 from isaaclab.envs.ui import EmptyWindow
 from isaaclab.managers import DatasetExportMode
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
-from scripts.imitation_learning.robomimic.backup_controller_handler import BackupController
 
-
-#rom isaaclab_tasks.manager_based.manipulation.lift.lift_env_cfg import LiftEnvCfg
-#from scripts.environments.state_machine.stack_lab_sm import PickAndLiftSm
-#from scripts.environments.state_machine.weigh_lab_sm import PickAndLiftSm
-#from scripts.environments.state_machine.pour_lab_sm import PickAndLiftSm
-#from scripts.environments.state_machine.stack_weigh_lab_sm import PickAndLiftSm
-
+from isaaclab.managers import RecorderTermCfg
+from isaaclab.managers.recorder_manager import RecorderTerm
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+from scripts.imitation_learning.robomimic.test_controller import TestController
 
 class RateLimiter:
     """Convenience class for enforcing rates in loops."""
@@ -139,8 +139,7 @@ class RateLimiter:
         next_wakeup_time = self.last_time + self.sleep_duration
         while time.time() < next_wakeup_time:
             time.sleep(self.render_period)
-            if not args_cli.headless:
-                env.sim.render()
+            env.sim.render()
 
         self.last_time = self.last_time + self.sleep_duration
 
@@ -149,212 +148,428 @@ class RateLimiter:
             while self.last_time < time.time():
                 self.last_time += self.sleep_duration
 
-def init_state_machine(env, device):
-    """Create PickAndLiftSm once and capture initial TCP orientation."""
+class AbsoluteEEFActionRecorder(RecorderTerm):
+    """Records absolute EEF pose instead of relative action deltas."""
 
-    backup_controller  = BackupController(env, device, tasktype="insert_top")
-    state_guess = 0
+    def record_pre_step(self, action: torch.Tensor) -> dict[str, torch.Tensor]:
+        # Pull absolute EEF pose from the frame transformer
+        ee_frame = self._env.scene["ee_frame"]
+        ee_pos_w = ee_frame.data.target_pos_w[:, 0, :]
+        ee_quat_w = ee_frame.data.target_quat_w[:, 0, :]
 
-    # Read current ee frame and capture a fixed orientation (per env)
-    
+        # Robot-root-relative position
+        robot_root_pos = self._env.scene["robot"].data.root_pos_w
+        ee_pos_local = ee_pos_w - robot_root_pos
 
-    return backup_controller
+        # Gripper from original action
+        gripper = action[:, -1:]
 
-def state_machine_step(env, backup_controller, fixed_tcp_rot):
+        abs_action = torch.cat([ee_pos_local, ee_quat_w, gripper], dim=-1)
+        return {"actions": abs_action}
 
-    action, state_guess = backup_controller.get_controller_action(state_guess, 0)
-    """Compute a single-step action from the persistent state machine (does NOT call env.step)."""
-    
-    return action
+def setup_output_directories() -> tuple[str, str]:
+    """Set up output directories for saving demonstrations.
 
-def reset_env_and_sm(env, backup_controller, reset_indices=None):
-    """Reset specified environments (or all if None) along with the state machine.
+    Creates the output directory if it doesn't exist and extracts the file name
+    from the dataset file path.
 
-    Args:
-        env: The environment instance
-        pick_sm: The state machine
-        reset_indices: Optional list/1D tensor of env indices to reset. If None, resets all.
     Returns:
-        fixed_tcp_rot: (num_envs, 4) tensor of fixed TCP rotations
-        actions: action buffer tensor
+        tuple[str, str]: A tuple containing:
+            - output_dir: The directory path where the dataset will be saved
+            - output_file_name: The filename (without extension) for the dataset
     """
-    if reset_indices is None:
-        # full reset
-        env.sim.reset()
-        env.reset()
-        reset_indices = torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device)
-    else:
-        # partial reset
-        env.reset(reset_indices)
-
-    # reset state machine for these envs
-    backup_controller.reset()
-
-    # get new tcp rotation for *all* envs (keep shape consistent)
-    # ee_frame = env.unwrapped.scene["ee_frame"]
-    # fixed_tcp_rot = ee_frame.data.target_quat_w[..., 0, :].clone()
-
-    # reset action buffer (neutral gripper open)
-    actions = torch.zeros(env.unwrapped.action_space.shape, device=env.unwrapped.device)
-    
-    return actions
-
-def main():
-    """Collect demonstrations from the environment using teleop interfaces."""
-
-    if args_cli.headless:
-        rate_limiter = None
-    else:
-        rate_limiter = RateLimiter(args_cli.step_hz)
-
-    # prepare dataset directory
+    # get directory path and file name (without extension) from cli arguments
     output_dir = os.path.dirname(args_cli.dataset_file)
     output_file_name = os.path.splitext(os.path.basename(args_cli.dataset_file))[0]
-    os.makedirs(output_dir, exist_ok=True)
 
-    num_envs = 1
-    success_step_counts = [0 for _ in range(num_envs)]
+    # create directory if it does not exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created output directory: {output_dir}")
 
-    env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1, use_fabric=not args_cli.disable_fabric)
-    success_term = env_cfg.terminations.success
-    env_cfg.terminations.success = None
-    # success_term = None
-    # if hasattr(env_cfg.terminations, "success_term"):
-    #     success_term = env_cfg.terminations.success_term
-    #     env_cfg.terminations.success_term = None
-    # else:
-    #     omni.log.warn("No success termination term found — cannot mark demos as successful.")
+    return output_dir, output_file_name
+
+
+def create_environment_config(
+    output_dir: str, output_file_name: str
+) -> tuple[ManagerBasedRLEnvCfg | DirectRLEnvCfg, object | None]:
+    """Create and configure the environment configuration.
+
+    Parses the environment configuration and makes necessary adjustments for demo recording.
+    Extracts the success termination function and configures the recorder manager.
+
+    Args:
+        output_dir: Directory where recorded demonstrations will be saved
+        output_file_name: Name of the file to store the demonstrations
+
+    Returns:
+        tuple[isaaclab_tasks.utils.parse_cfg.EnvCfg, Optional[object]]: A tuple containing:
+            - env_cfg: The configured environment configuration
+            - success_term: The success termination object or None if not available
+
+    Raises:
+        Exception: If parsing the environment configuration fails
+    """
+    # parse configuration
+    try:
+        env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1)
+        env_cfg.env_name = args_cli.task.split(":")[-1]
+    except Exception as e:
+        omni.log.error(f"Failed to parse environment configuration: {e}")
+        exit(1)
+
+    # extract success checking function to invoke in the main loop
+    success_term = None
+    if hasattr(env_cfg.terminations, "success"):
+        success_term = env_cfg.terminations.success
+        env_cfg.terminations.success = None
+    else:
+        omni.log.warn(
+            "No success termination term was found in the environment."
+            " Will not be able to mark recorded demos as successful."
+        )
+
+    if args_cli.xr:
+        # If cameras are not enabled and XR is enabled, remove camera configs
+        if not args_cli.enable_cameras:
+            env_cfg = remove_camera_configs(env_cfg)
+        env_cfg.sim.render.antialiasing_mode = "DLSS"
+
+    # modify configuration such that the environment runs indefinitely until
+    # the goal is reached or other termination conditions are met
+    env_cfg.terminations.time_out = None
+    env_cfg.observations.policy.concatenate_terms = False
 
     env_cfg.recorders: ActionStateRecorderManagerCfg = ActionStateRecorderManagerCfg()
     env_cfg.recorders.dataset_export_dir_path = output_dir
     env_cfg.recorders.dataset_filename = output_file_name
     env_cfg.recorders.dataset_export_mode = DatasetExportMode.EXPORT_SUCCEEDED_ONLY
 
-    env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
-    # Set seed9
-    torch.manual_seed(args_cli.seed)
-    env.seed(args_cli.seed)
-    # control flags
-    should_reset_recording_instance = False
-    running_recording_instance = True
+    return env_cfg, success_term
 
-    def reset_recording_instance():
-        nonlocal should_reset_recording_instance
-        should_reset_recording_instance = True
 
-    def start_recording_instance():
-        nonlocal running_recording_instance
-        running_recording_instance = True
+def create_environment(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg) -> gym.Env:
+    """Create the environment from the configuration.
 
-    def stop_recording_instance():
-        nonlocal running_recording_instance
-        running_recording_instance = False
+    Args:
+        env_cfg: The environment configuration object that defines the environment properties.
+            This should be an instance of EnvCfg created by parse_env_cfg().
 
-    # reset everything at start
-    env.sim.reset()
-    env.reset()
+    Returns:
+        gym.Env: A Gymnasium environment instance for the specified task.
 
-    current_recorded_demo_count = 0
-    label_text = f"Recorded {current_recorded_demo_count} successful demonstrations."
+    Raises:
+        Exception: If environment creation fails for any reason.
+    """
+    try:
+        env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
+        return env
+    except Exception as e:
+        omni.log.error(f"Failed to create environment: {e}")
+        exit(1)
 
-    if not args_cli.headless:
-        instruction_display = InstructionDisplay(args_cli.teleop_device)
+
+def setup_teleop_device(callbacks: dict[str, Callable]) -> object:
+    """Set up the teleoperation device based on configuration.
+
+    Attempts to create a teleoperation device based on the environment configuration.
+    Falls back to default devices if the specified device is not found in the configuration.
+
+    Args:
+        callbacks: Dictionary mapping callback keys to functions that will be
+                   attached to the teleop device
+
+    Returns:
+        object: The configured teleoperation device interface
+
+    Raises:
+        Exception: If teleop device creation fails
+    """
+    teleop_interface = None
+    try:
+        if hasattr(env_cfg, "teleop_devices") and args_cli.teleop_device in env_cfg.teleop_devices.devices:
+            teleop_interface = create_teleop_device(args_cli.teleop_device, env_cfg.teleop_devices.devices, callbacks)
+        else:
+            omni.log.warn(f"No teleop device '{args_cli.teleop_device}' found in environment config. Creating default.")
+            # Create fallback teleop device
+            if args_cli.teleop_device.lower() == "keyboard":
+                teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.2, rot_sensitivity=0.5))
+            elif args_cli.teleop_device.lower() == "spacemouse":
+                teleop_interface = Se3SpaceMouse(Se3SpaceMouseCfg(pos_sensitivity=0.2, rot_sensitivity=0.5))
+            elif args_cli.teleop_device.lower() == "stateMachine":
+                teleop_interface = TaskController()
+            else:
+                omni.log.error(f"Unsupported teleop device: {args_cli.teleop_device}")
+                omni.log.error("Supported devices: keyboard, spacemouse, handtracking")
+                exit(1)
+
+            # Add callbacks to fallback device
+            for key, callback in callbacks.items():
+                teleop_interface.add_callback(key, callback)
+    except Exception as e:
+        omni.log.error(f"Failed to create teleop device: {e}")
+        exit(1)
+
+    if teleop_interface is None:
+        omni.log.error("Failed to create teleop interface")
+        exit(1)
+
+    return teleop_interface
+
+
+def setup_ui(label_text: str, env: gym.Env) -> InstructionDisplay:
+    """Set up the user interface elements.
+
+    Creates instruction display and UI window with labels for showing information
+    to the user during demonstration recording.
+
+    Args:
+        label_text: Text to display showing current recording status
+        env: The environment instance for which UI is being created
+
+    Returns:
+        InstructionDisplay: The configured instruction display object
+    """
+    instruction_display = InstructionDisplay(args_cli.teleop_device)
+    if not args_cli.xr:
         window = EmptyWindow(env, "Instruction")
         with window.ui_window_elements["main_vstack"]:
             demo_label = ui.Label(label_text)
             subtask_label = ui.Label("")
             instruction_display.set_labels(subtask_label, demo_label)
+
+    return instruction_display
+
+
+def process_success_condition(env: gym.Env, success_term: object | None, success_step_count: int) -> tuple[int, bool]:
+    """Process the success condition for the current step.
+
+    Checks if the environment has met the success condition for the required
+    number of consecutive steps. Marks the episode as successful if criteria are met.
+
+    Args:
+        env: The environment instance to check
+        success_term: The success termination object or None if not available
+        success_step_count: Current count of consecutive successful steps
+
+    Returns:
+        tuple[int, bool]: A tuple containing:
+            - updated success_step_count: The updated count of consecutive successful steps
+            - success_reset_needed: Boolean indicating if reset is needed due to success
+    """
+    if success_term is None:
+        return success_step_count, False
+
+    if bool(success_term.func(env, **success_term.params)[0]):
+        success_step_count += 1
+        if success_step_count >= args_cli.num_success_steps:
+            env.recorder_manager.record_pre_reset([0], force_export_or_skip=False)
+            env.recorder_manager.set_success_to_episodes(
+                [0], torch.tensor([[True]], dtype=torch.bool, device=env.device)
+            )
+            env.recorder_manager.export_episodes([0])
+            print("Success condition met! Recording completed.")
+            return success_step_count, True
     else:
-        demo_label = None
-        subtask_label = None
-        print(label_text)
+        success_step_count = 0
 
-    # init state machine + reset all envs
-    pick_sm= init_state_machine(env, args_cli.device)
-    actions = reset_env_and_sm(env, pick_sm)
-    state_guess=0
-    while simulation_app.is_running():
-        if running_recording_instance:
-            # standard Gymnasium step return
-            actions, state_guess = pick_sm.get_controller_action(state_guess, 0)
-            obs, rewards, dones, infos, _ = env.step(actions)
+    return success_step_count, False
 
-            # compute next actions
-            #action, state_guess = pick_sm.get_controller_action(state_guess, 0)
-            if dones.any():
-                done_mask = dones.detach().cpu().numpy().astype(bool) if isinstance(dones, torch.Tensor) else np.asarray(dones, dtype=bool)
 
-                # success mask from env infos (matches training!)
-                if "success_term" in infos:
-                    success_mask = infos["success_term"].detach().cpu().numpy().astype(bool)
-                else:
-                    success_mask = np.zeros(env.unwrapped.num_envs, dtype=bool)
+def handle_reset(
+    env: gym.Env, success_step_count: int, instruction_display: InstructionDisplay, label_text: str
+) -> int:
+    """Handle resetting the environment.
 
-                exported_indices = []
-                for idx in range(env.unwrapped.num_envs):
-                    if not done_mask[idx]:
-                        continue  # only process finished envs
+    Resets the environment, recorder manager, and related state variables.
+    Updates the instruction display with current status.
 
-                    if success_mask[idx]:
-                        success_step_counts[idx] += 1
-                        print(f"[INFO] Env {idx} success streak: {success_step_counts[idx]}")
-                    else:
-                        if success_step_counts[idx] != 0:
-                            print(f"[INFO] Env {idx} failed, resetting streak")
-                        success_step_counts[idx] = 0
+    Args:
+        env: The environment instance to reset
+        success_step_count: Current count of consecutive successful steps
+        instruction_display: The display object to update
+        label_text: Text to display showing current recording status
 
-                    # reached threshold → export demo
-                    if success_step_counts[idx] >= args_cli.num_success_steps:
-                        print(f"[INFO] Exporting successful demo for env {idx}")
-                        env.recorder_manager.record_pre_reset([idx], force_export_or_skip=False)
-                        env.recorder_manager.set_success_to_episodes(
-                            [idx],
-                            torch.tensor([[True]], dtype=torch.bool, device=env.device),
-                        )
-                        env.recorder_manager.export_episodes([idx])
-                        exported_indices.append(idx)
-                        success_step_counts[idx] = 0
+    Returns:
+        int: Reset success step count (0)
+    """
+    print("Resetting environment...")
+    env.sim.reset()
+    env.recorder_manager.reset()
+    env.reset()
+    success_step_count = 0
+    instruction_display.show_demo(label_text)
+    return success_step_count
 
-                if exported_indices:
-                    print(f"[INFO] Exported env indices: {exported_indices}")
-                    pick_sm.reset()
-                    fixed_tcp_rot, actions = reset_env_and_sm(
-                        env, pick_sm, torch.tensor(exported_indices, device=env.device)
-                    )
-                else:
-                    pick_sm.reset()
-                    reset_indices = [idx for idx in range(env.unwrapped.num_envs) if done_mask[idx]]
-                    if reset_indices:
-                        print(f"[INFO] Resetting env indices: {reset_indices}")
-                        fixed_tcp_rot, actions = reset_env_and_sm(
-                            env, pick_sm, torch.tensor(reset_indices, device=env.device)
-                        )
-                        for idx in reset_indices:
-                            success_step_counts[idx] = 0
 
+def run_simulation_loop(
+    env: gym.Env,
+    teleop_interface: object | None,
+    success_term: object | None,
+    rate_limiter: RateLimiter | None,
+) -> int:
+    """Run the main simulation loop for collecting demonstrations.
+
+    Sets up callback functions for teleop device, initializes the UI,
+    and runs the main loop that processes user inputs and environment steps.
+    Records demonstrations when success conditions are met.
+
+    Args:
+        env: The environment instance
+        teleop_interface: Optional teleop interface (will be created if None)
+        success_term: The success termination object or None if not available
+        rate_limiter: Optional rate limiter to control simulation speed
+
+    Returns:
+        int: Number of successful demonstrations recorded
+    """
+    current_recorded_demo_count = 0
+    success_step_count = 0
+    should_reset_recording_instance = False
+    running_recording_instance = not args_cli.xr
+
+    sm_controller = TestController(device='cuda:0', env=env)
+
+    # Callback closures for the teleop device
+    def reset_recording_instance():
+        nonlocal should_reset_recording_instance
+        should_reset_recording_instance = True
+        print("Recording instance reset requested")
+
+    def start_recording_instance():
+        nonlocal running_recording_instance
+        running_recording_instance = True
+        print("Recording started")
+
+    def stop_recording_instance():
+        nonlocal running_recording_instance
+        running_recording_instance = False
+        print("Recording paused")
+
+    # Set up teleoperation callbacks
+    teleoperation_callbacks = {
+        "R": reset_recording_instance,
+        "START": start_recording_instance,
+        "STOP": stop_recording_instance,
+        "RESET": reset_recording_instance,
+    }
+
+    teleop_interface = setup_teleop_device(teleoperation_callbacks)
+    teleop_interface.add_callback("R", reset_recording_instance)
+
+    # Reset before starting
+    env.sim.reset()
+    env.reset()
+    teleop_interface.reset()
+    sm_controller.reset()
+    print("SM controller reset")
+    label_text = f"Recorded {current_recorded_demo_count} successful demonstrations."
+    instruction_display = setup_ui(label_text, env)
+
+    subtasks = {}
+
+    with contextlib.suppress(KeyboardInterrupt) and torch.inference_mode():
+        while simulation_app.is_running():
+            # Get keyboard command
+            action = teleop_interface.advance()
+            # get sm action from state machine controller 
+            sm_action = sm_controller.get_action()
+            # Expand to batch dimension
+            actions = sm_action.repeat(env.num_envs, 1)
+          #  print("actions: ", actions)
+            # Perform action on environment
+            if running_recording_instance:
+                # Compute actions based on environment
+                obv = env.step(actions)
+                if subtasks is not None:
+                    if subtasks == {}:
+                        subtasks = obv[0].get("subtask_terms")
+                    elif subtasks:
+                        show_subtask_instructions(instruction_display, subtasks, obv, env.cfg)
             else:
-                if not args_cli.headless:
-                    env.sim.render()
+                env.sim.render()
 
-        # update demo count label
-        if env.recorder_manager.exported_successful_episode_count > current_recorded_demo_count:
-            current_recorded_demo_count = env.recorder_manager.exported_successful_episode_count
-            label_text = f"Recorded {current_recorded_demo_count} successful demonstrations."
-            print(label_text)
+            # Check for success condition
+            success_step_count, success_reset_needed = process_success_condition(env, success_term, success_step_count)
+            if success_reset_needed:
+                should_reset_recording_instance = True
 
-        # stop when enough demos are recorded
-        if args_cli.num_demos > 0 and env.recorder_manager.exported_successful_episode_count >= args_cli.num_demos:
-            print(f"All {args_cli.num_demos} demonstrations recorded. Exiting the app.")
-            break
+            # Update demo count if it has changed
+            if env.recorder_manager.exported_successful_episode_count > current_recorded_demo_count:
+                current_recorded_demo_count = env.recorder_manager.exported_successful_episode_count
+                label_text = f"Recorded {current_recorded_demo_count} successful demonstrations."
+                print(label_text)
 
-        if env.sim.is_stopped():
-            break
+            # Check if we've reached the desired number of demos
+            if args_cli.num_demos > 0 and env.recorder_manager.exported_successful_episode_count >= args_cli.num_demos:
+                label_text = f"All {current_recorded_demo_count} demonstrations recorded.\nExiting the app."
+                instruction_display.show_demo(label_text)
+                print(label_text)
+                target_time = time.time() + 0.8
+                while time.time() < target_time:
+                    if rate_limiter:
+                        rate_limiter.sleep(env)
+                    else:
+                        env.sim.render()
+                break
 
-        if rate_limiter:
-            rate_limiter.sleep(env)
+            # Handle reset if requested
+            if should_reset_recording_instance:
+                success_step_count = handle_reset(env, success_step_count, instruction_display, label_text)
+                sm_controller.reset()
+                should_reset_recording_instance = False
+
+            # Check if simulation is stopped
+            if env.sim.is_stopped():
+                break
+
+            # Rate limiting
+            if rate_limiter:
+                rate_limiter.sleep(env)
+
+    return current_recorded_demo_count
 
 
+def main() -> None:
+    """Collect demonstrations from the environment using teleop interfaces.
+
+    Main function that orchestrates the entire process:
+    1. Sets up rate limiting based on configuration
+    2. Creates output directories for saving demonstrations
+    3. Configures the environment
+    4. Runs the simulation loop to collect demonstrations
+    5. Cleans up resources when done
+
+    Raises:
+        Exception: Propagates exceptions from any of the called functions
+    """
+    # if handtracking is selected, rate limiting is achieved via OpenXR
+    if args_cli.xr:
+        rate_limiter = None
+        from isaaclab.ui.xr_widgets import TeleopVisualizationManager, XRVisualization
+
+        # Assign the teleop visualization manager to the visualization system
+        XRVisualization.assign_manager(TeleopVisualizationManager)
+    else:
+        rate_limiter = RateLimiter(args_cli.step_hz)
+
+    # Set up output directories
+    output_dir, output_file_name = setup_output_directories()
+
+    # Create and configure environment
+    global env_cfg  # Make env_cfg available to setup_teleop_device
+    env_cfg, success_term = create_environment_config(output_dir, output_file_name)
+
+    # Create environment
+    env = create_environment(env_cfg)
+
+    # Run simulation loop
+    current_recorded_demo_count = run_simulation_loop(env, None, success_term, rate_limiter)
+
+    # Clean up
     env.close()
+    print(f"Recording session completed with {current_recorded_demo_count} successful demonstrations")
+    print(f"Demonstrations saved to: {args_cli.dataset_file}")
 
 
 if __name__ == "__main__":
