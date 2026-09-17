@@ -8,7 +8,7 @@ from isaaclab.utils import configclass
 
 #from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_env_place import FrankaDevEnvCfg
 #from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_env_obs import FrankaDevEnvCfg
-from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_vial_insert_top_down import FrankaDevEnvCfg
+from isaaclab_tasks.manager_based.manipulation.cube_lift.config.franka.dev_ik_rel_vial_lift_top_dow import FrankaDevEnvCfg
 
 @configclass
 class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
@@ -139,7 +139,7 @@ class CubeMimicEnvCfg(FrankaDevEnvCfg, MimicEnvCfg):
                 object_ref="object",
                 # End of final subtask - when using --annotate_subtask_start_signals, 
                 # the last subtask must also have a signal name
-                subtask_term_signal="stacked",
+                subtask_term_signal="appr_goal",
                 # No time offsets for the final subtask
                 subtask_term_offset_range=(0, 0),
                 # Selection strategy for source subtask segment

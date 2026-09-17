@@ -54,7 +54,7 @@ docker/artifacts/
 # Doc Outputs
 **/docs/_build/*
 **/generated/*
-
+docs/Place_VM/*
 # Isaac-Sim packman
 _isaac_sim*
 _repo
@@ -140,3 +140,9 @@ docs/insert/Dev-IK-Rel-Insert-v0_old/model8/vial_insert/20260216134808/config.js
 docs/insert/Dev-IK-Rel-Insert-v0_old/model9/vial_insert/20260216134808/config.json
 docs/place_VM/test/*.tar.gz
 *.mp4
+docs/place_VM/diff*
+docs/place_VM/diff*
+docs/place_VM/diff
+docs/place_VM/diff
+docs/TARLoco
+docs/TARLoco

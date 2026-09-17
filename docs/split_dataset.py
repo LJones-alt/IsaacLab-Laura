@@ -12,7 +12,7 @@ Args:
     ratio (float): validation ratio, in (0, 1). Defaults to 0.1, which is 10%.
 
 Example usage:
-    python docs/split_dataset.py --dataset docs/place_VM/vial_place_demos_generated.hdf5 --ratio 0.1
+    python docs/split_dataset.py --dataset docs/place_VM/beaker_place_sm_demos2.hdf5   --ratio 0.1
 """
 
 import argparse

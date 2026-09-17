@@ -50,6 +50,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
         "env_cfg_entry_point": f"{__name__}.ik_abs_env_cfg:FrankaCubeLiftEnvCfg",
+        #"rsl_rl_cfg_entry_point": Go1RoughRnnTarRunnerCfg
     },
     disable_env_checker=True,
 )
@@ -76,3 +77,7 @@ gym.register(
     },
     disable_env_checker=True,
 )
+
+
+
+

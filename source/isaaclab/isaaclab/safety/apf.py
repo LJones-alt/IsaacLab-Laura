@@ -35,6 +35,7 @@ class ExactBCNet(nn.Module):
         ).to(self.device)
     
     def target_function(self, x, walls, obs_params):
+        ## signed distance function to obstacle given current position
         # x: [N, 3], walls: [N, 6], obs_params: [N, 4]
         px, py, pz = x[:, 0:1], x[:, 1:2], x[:, 2:3]
         xmin, xmax, ymin, ymax, zmin, zmax = walls.unbind(1)
@@ -79,6 +80,7 @@ class APF():
         self.net = ExactBCNet(self.device, self.t_max)
         self.optimizer = optim.Adam(self.net.parameters(), lr=self.lr)
         self.name = name
+        self.model_path = "/workspace/isaaclab/docs/apf/safety_wall_model.pth"
         # now run the functions
         if retrain:
             self.train()
@@ -87,18 +89,7 @@ class APF():
             self.plot_with_obstacle(self.net, 0.02, self.hazards, 0.2)    
 
     def compute_safe_velocity(self, current_pos, nominal_velocity, safety_margin=0.01, repulsion_gain=2.0):
-        """
-        Compute a safe velocity by modifying the nominal velocity using the APF gradient.
-        
-        Args:
-            current_pos: torch.Tensor or array-like [3] (EE position)
-            nominal_velocity: torch.Tensor or array-like [3] (Desired EE velocity/delta)
-            safety_margin: float, distance at which repulsion starts
-            repulsion_gain: float, gain for the repulsive force
-            
-        Returns:
-            safe_velocity: torch.Tensor [3]
-        """
+ 
         if not isinstance(current_pos, torch.Tensor):
             current_pos = torch.tensor(current_pos, dtype=torch.float32, device=self.device)
         if not isinstance(nominal_velocity, torch.Tensor):
@@ -181,7 +172,9 @@ class APF():
             v = self.net.forward(data)
             l_x = self.net.target_function(data[:, :3], data[:, 4:10], data[:, 10:])
             loss = torch.mean((v - l_x)**2)
-            self.optimizer.zero_grad(); loss.backward(); self.optimizer.step()
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
             
             if i % 100 == 0:
                 wandb.log({"pretrain_loss": loss.item(), "epoch": i})
@@ -201,7 +194,7 @@ class APF():
                 wandb.log({"hjb_loss": loss.item(), "t_start": t_start, "epoch": self.pretrain_iters + i})
         
         wandb.finish()
-        torch.save(self.net.state_dict(), "/workspace/isaaclab/docs/apf/safety_wall_model.pth")
+        torch.save(self.net.state_dict(), self.model_path)
 
     def load_model(self, model_path):
         self.net.load_state_dict(torch.load(model_path))

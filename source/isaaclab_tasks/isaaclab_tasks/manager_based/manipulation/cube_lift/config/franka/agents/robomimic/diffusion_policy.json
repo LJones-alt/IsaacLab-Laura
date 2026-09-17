@@ -1,7 +1,7 @@
 {
     "algo_name": "diffusion_policy",
     "experiment": {
-        "name": "diffusion_policy_additional_obs",
+        "name": "diffusion_policy_adjusted_new",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": true,
@@ -12,7 +12,7 @@
         "save": {
             "enabled": true,
             "every_n_seconds": null,
-            "every_n_epochs": null,
+            "every_n_epochs": 50,
             "epochs": [],
             "on_best_validation": true,
             "on_best_rollout_return": false,
@@ -37,15 +37,15 @@
     "train": {
         "data": null,
         "output_dir": "docs/training_runs/diffusion_policy_vision",
-        "num_data_workers": 0,
+        "num_data_workers": 4,
         "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": "valid",
-        "seq_length": 28,
+        "seq_length": 64,
         "pad_seq_length": true,
-        "frame_stack": 2,
+        "frame_stack": 1,
         "pad_frame_stack": true,
         "goal_mode": null,
         "dataset_keys": [
@@ -57,8 +57,8 @@
             "actions"
         ],
         "cuda": true,
-        "batch_size": 256,
-        "num_epochs": 1000,
+        "batch_size": 64,
+        "num_epochs": 200,
         "seed": 101
     },
     "algo": {
@@ -67,7 +67,7 @@
                 "optimizer_type": "adamw",
                 "learning_rate": {
                     "initial": 0.0001,
-                    "decay_factor": 0.1,
+                    "decay_factor": 0.01,
                     "epoch_schedule": [],
                     "scheduler_type": "cosine",
                     "step_every_batch": true,
@@ -80,9 +80,9 @@
             }
         },
         "horizon": {
-            "observation_horizon": 4,
-            "action_horizon": 6,
-            "prediction_horizon": 16
+            "observation_horizon": 2,
+            "action_horizon": 16,
+            "prediction_horizon": 64
         },
         "unet": {
             "enabled": true,
@@ -97,11 +97,11 @@
         },
         "ema": {
             "enabled": true,
-            "power": 0.9
+            "power": 0.999
         },
         "ddpm": {
-            "enabled": true,
-            "num_train_timesteps": 20,
+            "enabled": false,
+            "num_train_timesteps": 100,
             "num_inference_timesteps": 100,
             "beta_schedule": "squaredcos_cap_v2",
             "clip_sample": true,
@@ -109,8 +109,8 @@
         },
         "ddim": {
             "enabled": true,
-            "num_train_timesteps": 20,
-            "num_inference_timesteps": 20,
+            "num_train_timesteps": 100,
+            "num_inference_timesteps": 16,
             "beta_schedule": "squaredcos_cap_v2",
             "clip_sample": true,
             "set_alpha_to_one": true,
@@ -125,7 +125,6 @@
                     "eef_pos",
                     "eef_quat",
                     "gripper_pos",
-                    "actions",
                     "object_position",
                     "target_object_position"
                 ],
@@ -150,8 +149,8 @@
                     "feature_dimension": 64,
                     "backbone_class": "ResNet18Conv",
                     "backbone_kwargs": {
-                        "pretrained": false,
-                        "input_coord_conv": false
+                        "pretrained": true,
+                        "input_coord_conv": true
                     },
                     "pool_class": "SpatialSoftmax",
                     "pool_kwargs": {
@@ -161,8 +160,13 @@
                         "noise_std": 0.0
                     }
                 },
-                "obs_randomizer_class": null,
-                "obs_randomizer_kwargs": {}
+                "obs_randomizer_class": "CropRandomizer",
+                "obs_randomizer_kwargs": {
+                    "crop_height": 128,
+                    "crop_width": 128,
+                    "num_crops": 1,
+                    "pos_enc": false
+                }
             }
         }
     }

@@ -53,6 +53,9 @@ group = parser.add_mutually_exclusive_group()
 group.add_argument("--use_recovery", type=bool ,default= False, help="Enable recovery mechanism. By default recovery is enabled.")
 
 parser.add_argument("--ensemble_size", type=int, default=10)
+parser.add_argument("--use_joint_pos", action="store_true", default=False, help="Use Joint Position State Machine Controller.")
+parser.add_argument("--gripper_orient", type=int, default=0)
+
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -98,14 +101,17 @@ from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsA
 from isaaclab.envs.mdp.actions.binary_joint_actions import BinaryJointPositionAction
 from backup_controller_handler import BackupController
 from test_controller import TestController
+from test_controller_top import TestController as TopTestController
+from test_joint_pos_controller import TestJointPosControllerSM
 
-def rollout_ensemble(env, success_term, horizon, device):
+def rollout_ensemble(env, success_term, horizon, device, use_joint_pos: bool = False):
     """Perform a single rollout of the policy in the environment.
     Args:
         policy: The robomimicpolicy to play.
         env: The environment to play in.
         horizon: The step horizon of each rollout.
         device: The device to run the policy on.
+        use_joint_pos: Whether to use Joint Position state machine controller.
     Returns:
         terminated: Whether the rollout terminated.
         traj: The trajectory of the rollout.
@@ -113,36 +119,31 @@ def rollout_ensemble(env, success_term, horizon, device):
     env.reset()
     ###### SETUP SWITCHING LOGIC ####
 
-
-    ### SET USE RECOVERY TO FALSE   ####
-    # Set up recovery controller 
-    
-    
-    #backup_controller  = BackupController(env, device, tasktype="new_place")
-    test_controller = TestController(device, env)
-    state_guess = 0
+    if use_joint_pos:
+        print(f"Joint pos controller")
+        test_controller = TestJointPosControllerSM(device, env)
+    else:
+        print(f"Diff IK controller")
+        #test_controller = TestController(device, env, args_cli.gripper_orient)
+        test_controller=TopTestController(device, env, args_cli.gripper_orient )
+    #test_controller = TestController(device, env, args_cli.gripper_orient)
     for i in range(horizon):
-        
-        
-        #action, state_guess = backup_controller.get_controller_action(state_guess, 0)
         action = test_controller.get_action()
-       # print(f"state guess : {state_guess}")
-        
-        zero_action = torch.zeros(1, env.action_space.shape[1], device=device)
-        #print(f"\npassed this action {action}")
+        #print(f"Action: {action}")
         obs_dict, _, terminated, truncated, _ = env.step(action)
-        #sim.step()
-        #obs_dict, _, terminated, truncated, _ = env.step(ee_goal)
-
-        # check if we reached target (use absolute pos error)
         
-       # print(f"[DEBUG] post-step pos_err (before update): {pos_err.item():.6f}")
+        # Check success condition
         if bool(success_term.func(env, **success_term.params)[0]):
-            backup_controller.reset()
+            test_controller.reset()
             return True
+        # Check termination or truncation condition
         elif terminated or truncated:
-            backup_controller.reset()
+            test_controller.reset()
             return False
+    test_controller.reset()
+    return False
+    
+
        
     
           
@@ -174,7 +175,8 @@ def main():
     for trial in range(args_cli.num_rollouts):
         print(f"[INFO] Starting trial {trial}")
 
-        rollout_ensemble( env, success_term, args_cli.horizon, device)
+        rollout_ensemble(env, success_term, args_cli.horizon, device, args_cli.use_joint_pos)
+
         # save the uncertainties
     env.close()
 

@@ -23,37 +23,56 @@ class ForwardsDynamics:
     def get_fk_solution(self, joint_angles):
         device = joint_angles.device
         print(f"got joint angles: {joint_angles}")
-        # Pre-define constant tensors on the target device
+        
         zero = torch.tensor(0.0, device=device)
         pi = torch.tensor(torch.pi, device=device)
-        half_pi = pi / 2
 
         # DH parameters structured as: (a, d, alpha, theta)
         dh_params = [
-            (zero, torch.tensor(0.333, device=device), zero, joint_angles[0]),
-            (zero, zero, -pi/2, joint_angles[1]),
-            (zero, torch.tensor(0.316, device=device), pi/2, joint_angles[2]),
-            (torch.tensor(0.0825, device=device), zero, pi/2, joint_angles[3]),
-            (torch.tensor(-0.0825, device=device), torch.tensor(0.384, device=device), -pi/2, joint_angles[4]),
-            (zero, zero, pi/2, joint_angles[5]),
-            (torch.tensor(0.088, device=device), zero, pi/2, joint_angles[6]),
-            # Flange and tool static transformations
+            (zero, torch.tensor(0.333, device=device), zero, joint_angles[0]),        # Joint 1
+            (zero, zero, -pi/2, joint_angles[1]),                                    # Joint 2
+            (zero, torch.tensor(0.316, device=device), pi/2, joint_angles[2]),       # Joint 3
+            (torch.tensor(0.0825, device=device), zero, pi/2, joint_angles[3]),      # Joint 4
+            (torch.tensor(-0.0825, device=device), torch.tensor(0.384, device=device), -pi/2, joint_angles[4]), # Joint 5
+            (zero, zero, pi/2, joint_angles[5]),                                    # Joint 6
+            (torch.tensor(0.088, device=device), zero, pi/2, joint_angles[6]),       # Joint 7
+            # Flange and tool static transformations (Indices 7, 8, 9)
             (zero, torch.tensor(0.107, device=device), zero, zero),
             (zero, zero, zero, -pi/4),
             (zero, torch.tensor(0.1034, device=device), zero, zero)
         ]
 
         T = torch.eye(4, device=device)
+        joint_positions = []
         
-        # Loop through all 10 transformation steps
-        for a, d, alpha, q in dh_params:
+        # Loop through all transformation steps
+        for i, (a, d, alpha, q) in enumerate(dh_params):
             T_i = self.get_tf_mat(a, d, alpha, q)
             T = T @ T_i
             
-        self.cartsian_ee =T
+            # Only record the origin for the first 7 actuated joint frames
+            if i < 7:
+                joint_positions.append(T[:3, 3])
+            
+        # Shape: (7, 3) representing the absolute 3D position of each joint frame
+        self.joint_positions = torch.stack(joint_positions)
+
+        self.cartsian_ee = T
         print(f"got T matrix: {T}")
         self.cartesian_ee_7d = self.matrix_to_pose_7d(T)
         return self.cartesian_ee_7d
+    
+    def get_joint_positions(self, joint_angles=None):
+        """
+        Returns the absolute 3D Cartesian coordinates [X, Y, Z] for each frame/joint 
+        along the robot's kinematic chain as a PyTorch tensor of shape (N, 3).
+        """
+        if joint_angles is not None or self.joint_positions is None:
+            if joint_angles is None:
+                raise ValueError("No cached joint positions available. Pass 'joint_angles' to compute FK.")
+            self.get_fk_solution(joint_angles)
+        print(f"got joint positions: {self.joint_positions}")
+        return self.joint_positions
 
     def matrix_to_pose_7d(self, T):
         """
@@ -63,13 +82,13 @@ class ForwardsDynamics:
         """
         device = T.device
         
-        # 1. Position extraction including the physical asset offset
+        #  Position extraction including the physical asset offset
         x_fixed = T[0, 3] - 0.0200
         y_fixed = T[1, 3] - 0.0200
         z_fixed = T[2, 3] + 0.0534
         position = torch.stack([x_fixed, y_fixed, z_fixed])
         
-        # 2. Linearize Rotation Matrix
+        # Linearize Rotation Matrix
         R = T[:3, :3]
         tr = R[0, 0] + R[1, 1] + R[2, 2]
         

@@ -7,7 +7,7 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 from isaaclab.utils import configclass
 from isaaclab.assets import RigidObjectCfg, ArticulationCfg
-from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.managers import ObservationTermCfg as ObsGroup
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
@@ -31,6 +31,7 @@ from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG
 
 ## add some cameras in
 
+## broken lol
 
 @configclass
 class ObservationsCfg:

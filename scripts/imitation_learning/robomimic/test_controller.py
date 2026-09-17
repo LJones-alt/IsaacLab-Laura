@@ -21,7 +21,7 @@ class GripperState:
     CLOSE = 1.0
 
 class TestController:
-    def __init__(self, device, env):
+    def __init__(self, device, env, gripper_orient:int=0):
         self.device = device
         self.env = env
         self.object_start_pos = torch.tensor([0, 0, 0], device=self.device)
@@ -33,7 +33,7 @@ class TestController:
         self.current_ee_rot = torch.tensor([0, 0, 0, 0], device=self.device)
         self.rest_pos = torch.tensor([0.5206, 0.0096, 0.3751], device=self.device)
         self.rest_rot = torch.tensor([[ 0.4821,  0.4953, -0.5114, -0.5106]], device=self.device)
-        self.ee_offset= torch.tensor([0, 0, 0.018], device=self.device)
+        self.ee_offset= torch.tensor([0, 0, 0.0], device=self.device)
         self.robot = env.unwrapped.scene["robot"]
         self.root_pose_w = self.robot.data.root_pose_w # world root pos
         self.state=TaskState.REST
@@ -46,6 +46,7 @@ class TestController:
         self.offset_pos = torch.tensor([[0.14, 0.0, 0.0]], device=self.device)
         self.offset_quat = torch.tensor([[0.5, -0.5, 0.5, -0.5]], device=self.device)
         self.robot_entity_cfg , self.ee_jacobi_idx = self._setup_robot()
+        self.gripper_orient=1
         self._init_task()
 
     def _init_task(self):
@@ -71,11 +72,19 @@ class TestController:
         
         self.object_start_rot = self.rest_rot
         self.object_goal_rot = self.rest_rot
-        print("[TEST_CONTROLLER] INIT")
-        print(f"object start pos (base frame): {self.object_start_pos}")
-        print(f"object goal pos (base frame): {self.object_goal_pos}")
-        print(f"object start rot: {self.object_start_rot}")
-        print(f"object goal rot: {self.object_goal_rot}")
+        # print("[TEST_CONTROLLER] INIT")
+        # print(f"object start pos (base frame): {self.object_start_pos}")
+        # print(f"object goal pos (base frame): {self.object_goal_pos}")
+        # print(f"object start rot: {self.object_start_rot}")
+        # print(f"object goal rot: {self.object_goal_rot}")
+
+        if self.gripper_orient==1:
+            print("GRIPPER ORIENT : Parallel to the scale")
+            self.offset_pos= torch.tensor([[0.14,0,0]], device=self.device)
+            self.offset_quat= torch.tensor([[0.5, -0.5, 0.5, -0.5]], device=self.device)
+            self.rest_pos = torch.tensor([0.2245, -0.1351,  0.4399], device=self.device)
+            self.rest_rot = torch.tensor([[0.6532,  0.6532, -0.2708, -0.2707]], device=self.device)
+        
         self._update_ee_pose()
 
     def _update_ee_pose(self):
@@ -94,7 +103,7 @@ class TestController:
         self.current_ee_pos = ee_pos_b
         self.current_ee_rot = ee_quat_b
 
-       # print(f"[TEST_CONTROLLER] current ee pos: {self.current_ee_pos}")
+        #print(f"[TEST_CONTROLLER] current ee pos: {self.current_ee_pos}")
         #print(f"[TEST_CONTROLLER] current ee rot: {self.current_ee_rot}")
     
     def _setup_robot(self):
@@ -124,42 +133,49 @@ class TestController:
             case TaskState.APPROACH_OBJECT:
                 self.gripper_state=GripperState.OPEN
                 position= torch.add(self.object_start_pos, self.ee_offset)
-                return position, self.rest_rot
+                return position, self.current_ee_rot #self.rest_rot
             case TaskState.GRASP_OBJECT:
                 self.gripper_state=GripperState.CLOSE
                 position= torch.add(self.object_start_pos, self.ee_offset)
-                return position, self.rest_rot
+                return position, self.current_ee_rot #self.rest_rot
             case TaskState.LIFT_OBJECT:
                 self.gripper_state=GripperState.CLOSE
                 position= torch.add(self.object_start_pos, torch.tensor([0, 0, 0.1], device=self.device))
-                return position, self.rest_rot
+                return position, self.current_ee_rot #self.rest_rot
             case TaskState.MIDPOINT:
                 self.gripper_state=GripperState.CLOSE
                 position= torch.add(self.object_start_pos, torch.tensor([0, 0, 0.2], device=self.device))
-                return position, self.rest_rot
+                return position, self.current_ee_rot #self.rest_rot
             case TaskState.APPROACH_ABOVE_GOAL:
                 self.gripper_state=GripperState.CLOSE
                 position= torch.add(self.object_goal_pos, torch.tensor([0, 0, 0.3], device=self.device))
-                return position, self.rest_rot
+                return position, self.current_ee_rot #self.rest_rot
             case TaskState.APPROACH_GOAL:
                 self.gripper_state=GripperState.CLOSE
-                position= torch.add(self.object_goal_pos, torch.tensor([0, 0, 0.12], device=self.device))
-                return position, self.rest_rot
+                position= torch.add(self.object_goal_pos, torch.tensor([0, 0, 0.1], device=self.device))
+                return position, self.current_ee_rot #self.rest_rot
             case TaskState.UNGRASP_OBJECT:
                 self.gripper_state=GripperState.OPEN
-                position= torch.add(self.object_goal_pos, torch.tensor([0, 0, 0.1], device=self.device))
-                return position, self.rest_rot
+                position= torch.add(self.object_goal_pos, torch.tensor([0, 0, 0.08], device=self.device))
+                return position, self.current_ee_rot #self.rest_rot
 
     def _calc_action(self, desired_pos, desired_rot):
         delta_pos = desired_pos - self.current_ee_pos
         delta_pos = torch.clamp(delta_pos, min=-self.clamp, max=self.clamp)
-        #print(f"[TEST_CONTROLLER] DELTA POS: {delta_pos}")
+       # print(f"[TEST_CONTROLLER] DELTA POS: {delta_pos}")
+        q_cur = self.current_ee_rot.clone()
+    
+        # Calculate dot product between desired_rot and current_ee_rot
+        dot = torch.sum(desired_rot * q_cur, dim=-1, keepdim=True)
+        # If dot product is negative, flip q_cur to take the shortest rotation path
+        q_cur = torch.where(dot < 0, -q_cur, q_cur)
+        #print(f"[TEST_CONTROLLER] Q CUR: {q_cur}")
         # conjugate of rot (w, -x, -y, -z)
         #q_cur_conj = torch.cat([self.current_ee_rot, -self.current_ee_rot], dim=-1)
-        q_cur_conj = self.current_ee_rot.clone()
+        q_cur_conj = q_cur.clone()
         q_cur_conj[..., 1:] *= -1 # Assuming (w, x, y, z).
         #print(f"[TEST_CONTROLLER] Q CUR CONJ: {q_cur_conj}")
-        delta_q = quat_mul(desired_rot, q_cur_conj)
+        delta_q = quat_mul(q_cur_conj, desired_rot)
         #print(f"[TEST_CONTROLLER] DELTA Q: {delta_q}")
         delta_axis_angle = axis_angle_from_quat(delta_q)
         #print(f"[TEST_CONTROLLER] DELTA AXIS ANGLE: {delta_axis_angle}")
@@ -207,8 +223,11 @@ class TestController:
             case TaskState.GRASP_OBJECT:
                 if torch.norm(self.current_ee_pos - desired_pos) < self.threshold and torch.norm(self.current_ee_rot - desired_rot) < self.threshold:
                     self.state_timer-=1
+                    # print("[TEST_CONTROLLER] GRASP_OBJECT -> LIFT_OBJECT")
+                    # self.state = TaskState.LIFT_OBJECT
+                    # self.state_timer=self.state_timer_reset  
                     # if below thresold, then move on to new state
-                    if self.state_timer<self.state_timer_reset/2:
+                    if self.state_timer<(self.state_timer_reset*0.9):
                         print("[TEST_CONTROLLER] GRASP_OBJECT -> LIFT_OBJECT")
                         self.state = TaskState.LIFT_OBJECT
                         self.state_timer=self.state_timer_reset    
@@ -228,6 +247,7 @@ class TestController:
                         print("[TEST_CONTROLLER] MIDPOINT -> APPROACH_ABOVE_GOAL")
                         self.state = TaskState.APPROACH_ABOVE_GOAL
                         self.state_timer=self.state_timer_reset
+                        self._init_task()
             case TaskState.APPROACH_ABOVE_GOAL:
                 if torch.norm(self.current_ee_pos - desired_pos) < self.threshold and torch.norm(self.current_ee_rot - desired_rot) < self.threshold:
                     self.state_timer-=1
@@ -255,8 +275,8 @@ class TestController:
             case _:
                 print("[TEST_CONTROLLER] UNKNOWN STATE")
                 self.state=TaskState.REST
-    #    print(f"[TEST_CONTROLLER] State : {self.state}")
-     #   print(f"[TEST_CONTROLLER] DESIRED POSE: {desired_pos}, {desired_rot}")
+        #print(f"[TEST_CONTROLLER] State : {self.state}")
+        #print(f"[TEST_CONTROLLER] DESIRED POSE: {desired_pos}, {desired_rot}")
         action= self._calc_action(desired_pos, desired_rot)
         return action
                     

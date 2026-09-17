@@ -11,7 +11,9 @@ or inverse kinematics control. The controller is responsible for generating the 
 commands to be sent to the robot.
 """
 
-from .differential_ik import DifferentialIKController
+from .differential_ik import DifferentialIKController#, DifferentialIKController_MOD
 from .differential_ik_cfg import DifferentialIKControllerCfg
 from .operational_space import OperationalSpaceController
 from .operational_space_cfg import OperationalSpaceControllerCfg
+from .test_joint_pos_controller import TestJointPosController, TestJointPosControllerCfg
+#from .franka_joint_controller import FrankaJointControllerAction, FrankaJointControllerActionCfg

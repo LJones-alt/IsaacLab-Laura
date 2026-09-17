@@ -53,6 +53,7 @@ parser.add_argument(
     default=False,
     help="Enable Pinocchio.",
 )
+parser.add_argument("--gripper_orient", type=int, default=0)
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -115,6 +116,7 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from scripts.imitation_learning.robomimic.test_controller import TestController
+from scripts.imitation_learning.robomimic.test_controller_top import TestController as TestControllerTop
 
 class RateLimiter:
     """Convenience class for enforcing rates in loops."""
@@ -296,8 +298,7 @@ def setup_teleop_device(callbacks: dict[str, Callable]) -> object:
                 teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.2, rot_sensitivity=0.5))
             elif args_cli.teleop_device.lower() == "spacemouse":
                 teleop_interface = Se3SpaceMouse(Se3SpaceMouseCfg(pos_sensitivity=0.2, rot_sensitivity=0.5))
-            elif args_cli.teleop_device.lower() == "stateMachine":
-                teleop_interface = TaskController()
+            
             else:
                 omni.log.error(f"Unsupported teleop device: {args_cli.teleop_device}")
                 omni.log.error("Supported devices: keyboard, spacemouse, handtracking")
@@ -407,6 +408,7 @@ def run_simulation_loop(
     teleop_interface: object | None,
     success_term: object | None,
     rate_limiter: RateLimiter | None,
+    gripper_type: int,
 ) -> int:
     """Run the main simulation loop for collecting demonstrations.
 
@@ -428,7 +430,8 @@ def run_simulation_loop(
     should_reset_recording_instance = False
     running_recording_instance = not args_cli.xr
 
-    sm_controller = TestController(device='cuda:0', env=env)
+    #sm_controller = TestController("cuda:0", env, 1)
+    sm_controller = TestControllerTop("cuda:0", env, 0)
 
     # Callback closures for the teleop device
     def reset_recording_instance():
@@ -474,6 +477,7 @@ def run_simulation_loop(
             action = teleop_interface.advance()
             # get sm action from state machine controller 
             sm_action = sm_controller.get_action()
+            #print("sm_action: ", sm_action)
             # Expand to batch dimension
             actions = sm_action.repeat(env.num_envs, 1)
           #  print("actions: ", actions)
@@ -564,7 +568,7 @@ def main() -> None:
     env = create_environment(env_cfg)
 
     # Run simulation loop
-    current_recorded_demo_count = run_simulation_loop(env, None, success_term, rate_limiter)
+    current_recorded_demo_count = run_simulation_loop(env, None, success_term, rate_limiter,1)
 
     # Clean up
     env.close()

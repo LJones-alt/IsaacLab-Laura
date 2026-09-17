@@ -92,7 +92,7 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.manager_based.manipulation.cube_lift import * # noqa: F401
 from isaaclab_tasks.manager_based.manipulation.cube_lift import mdp
 from isaaclab_tasks.manager_based.manipulation.cube_lift.mdp import franka_stack_events
-from isaaclab_tasks.manager_based.manipulation.cube_lift.lift_env_cfg import CubeEnvCfg
+#from isaaclab_tasks.manager_based.manipulation.cube_lift.dev_ik_rel_env_place_vismot import CubeEnvCfg
 
 def normalize_hdf5_actions(config: Config, log_dir: str) -> list:
     """Normalizes actions in hdf5 dataset to [-1, 1] range.
@@ -141,7 +141,7 @@ def normalize_hdf5_actions(config: Config, log_dir: str) -> list:
             f[path] = normalized_data
 
         # Save the min and max values to log directory
-        with open(os.path.join(log_dir, "normalization_params.txt"), "w") as norm_f:
+        with open("docs/normalization_params.txt", "w") as norm_f:
             norm_f.write(f"min: {min}\n")
             norm_f.write(f"max: {max}\n")
 

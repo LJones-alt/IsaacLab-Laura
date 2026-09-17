@@ -59,60 +59,12 @@ class EventCfg():
     #         "asset_cfg": SceneEntityCfg("object", body_names="object"),
     #     },
     )
-    # randomize_light = EventTerm(
-    #     func=franka_stack_events.randomize_scene_lighting_domelight,
-    #     mode="reset",
-    #     params={
-    #         "intensity_range": (1500.0, 10000.0),
-    #         "color_variation": 0.4,
-    #         "textures": [
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Cloudy/abandoned_parking_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Cloudy/evening_road_01_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Cloudy/lakeside_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/autoshop_01_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/carpentry_shop_01_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/hospital_room_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/hotel_room_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/old_bus_depot_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/small_empty_house_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Indoor/surgery_4k.hdr",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Assets/Skies/Studio/photo_studio_01_4k.hdr",
-    #         ],
-    #         "default_intensity": 3000.0,
-    #         "default_color": (0.75, 0.75, 0.75),
-    #         "default_texture": "",
-    #     },
-    # )
-
-    # randomize_table_visual_material = EventTerm(
-    #     func=franka_stack_events.randomize_visual_texture_material,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("table"),
-    #         "textures": [
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Ash/Ash_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Bamboo_Planks/Bamboo_Planks_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Birch/Birch_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Cherry/Cherry_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Mahogany_Planks/Mahogany_Planks_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Oak/Oak_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Plywood/Plywood_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Timber/Timber_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Timber_Cladding/Timber_Cladding_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Wood/Walnut_Planks/Walnut_Planks_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Stone/Marble/Marble_BaseColor.png",
-    #             f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Steel_Stainless/Steel_Stainless_BaseColor.png",
-    #         ],
-    #         "default_texture": (
-    #             f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/Materials/Textures/DemoTable_TableBase_BaseColor.png"
-    #         ),
-    #     },
-    # )
+    
     reset_object_position = EventTerm(
         func=mdp.reset_place_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (0,0), "y": (0,0), "z": (0.02, 0.02)},
+            "pose_range": {"x": (0,0.1), "y": (-0.1,0.3), "z": (0.022, 0.022)},
             "velocity_range": {},
             "asset_cfg": SceneEntityCfg("object", body_names="object"),
             "asset2_cfg" : SceneEntityCfg("stirplate"),
@@ -131,7 +83,7 @@ class ObservationsCfg:
         actions = ObsTerm(func=mdp.last_action)
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         # for debugging 
-       # abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
+        #abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
 
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
         object_position = ObsTerm(func=mdp.object_position_in_robot_root_frame)
@@ -148,39 +100,6 @@ class ObservationsCfg:
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("wrist_cam"), "data_type": "rgb", "normalize": False}
         )
 
-
-        # for cosmos add the segmentation, normals and depth data
-        table_cam_segmentation= ObsTerm(
-            func = mdp.image,
-            params = {
-                "sensor_cfg": SceneEntityCfg("table_cam"),
-                "data_type": "semantic_segmentation",
-                "normalize" : True,
-            }
-        )
-
-        table_cam_normals= ObsTerm(
-            func=mdp.image,
-            params={
-                "sensor_cfg": SceneEntityCfg("table_cam"),
-                "data_type" : "normals",
-                "normalize" : True,
-            }
-        )
-
-        table_cam_depth = ObsTerm(
-            func=mdp.image,
-            params={
-                "sensor_cfg": SceneEntityCfg("table_cam"),
-                "data_type": "distance_to_image_plane",
-                "normalize" : True,
-            }
-        )
-
-        ### debug obs
-
-
-        
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -239,39 +158,13 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         super().__post_init__()
        
 
-        # Update the ee_frame to use the correct prim paths for the custom robot
-                # self.scene.ee_frame = FrameTransformerCfg(
-        #     prim_path="{ENV_REGEX_NS}/Robot/panda_rf85_gripper2/panda_link0",
-        #     debug_vis=False,
-        #     target_frames=[
-        #         FrameTransformerCfg.FrameCfg(
-        #             prim_path="{ENV_REGEX_NS}/Robot/panda_rf85_gripper2/panda_link7",
-        #             name="end_effector",
-        #             offset=OffsetCfg(
-        #                 pos=[0.0, 0.0, 0.22], # Increased offset to reach gripper tip from link7
-        #             ),
-        #         ),
-        #     ],
-        # )
+       
 
         import carb
         from isaacsim.core.utils.carb import set_carb_setting
 
         carb_setting = carb.settings.get_settings()
-        #set_carb_setting(carb_setting, "/rtx/domeLight/upperLowerStrategy", 4)
-        # Force Path Tracing via Carb
-    #     set_carb_setting(carb_setting, "/rtx/renderMode", "PathTracing")
-    #     set_carb_setting(carb_setting, "/rtx/pathtracing/spp", 1)
-    #     set_carb_setting(carb_setting, "/rtx/pathtracing/totalSpp", 1)
-        
-    #     self.sim.render_settings = {
-    #         "rtx/renderMode": "PathTracing",
-    #         "rtx/pathtracing/spp": 1,
-    #         "rtx/pathtracing/totalSpp": 1,
-    #         "rtx/pathtracing/maxBounces": 4,
-    #         "rtx/hydra/enabled": True,
-    #     }
-    #   # apply_semantic_label(self.scene.robot.prim_path, "Robot")
+       # apply_semantic_label(self.scene.robot.prim_path, "Robot")
        # apply_semantic_label(self.scene.table.prim_path, "table")
         SEMANTIC_MAPPING = {
             "class:object": (120, 230, 255, 255),
@@ -304,13 +197,13 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         # put the beaker on the stir plate
         glassware = ChemistryGlassware()
         self.scene.stirplate = glassware.IKAplate(pos=[0.1, 0.0, 0.01])
-        self.scene.scale = glassware.scale(pos=[0.1, -0.4, 0.01])
+        self.scene.scale = glassware.scale(pos=[0.15, -0.4, 0.01])
         self.scene.object = glassware.beaker(pos=[0.2, 0.0, 0.01], name="object")
         self.scene.table_cam = CameraCfg(
             prim_path="{ENV_REGEX_NS}/table_cam",
             update_period=0.0,
-            height=96,
-            width=96,
+            height=144,
+            width=144,
             data_types=["rgb", "semantic_segmentation", "normals", "distance_to_image_plane"],
             colorize_semantic_segmentation=True,
             semantic_segmentation_mapping=SEMANTIC_MAPPING,
@@ -319,15 +212,16 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
             ),
             ### Where is this in the scene?
             offset=CameraCfg.OffsetCfg(
-                pos=(1.6, 0.0, 1.0), rot=(0.35355, -0.61237, -0.61237, 0.35355), convention="ros"
+                #pos=(1.6, -0.3, 1.0), rot=(0.35355, -0.61237, -0.61237, 0.35355), convention="ros"
+                pos=(0.2,-1.6, 0.9), rot=(0.53730, -0.84339, 0.0, 0.0), convention="ros"
             ),
         )
         self.scene.wrist_cam = CameraCfg(
             #prim_path="{ENV_REGEX_NS}/Robot/wrist_cam",
             prim_path="{ENV_REGEX_NS}/Robot/franka_robotiq_2f_85_flattened/Gripper/Robotiq_2F_85/base_link/wrist_camera_flipped",
             update_period=0.0,
-            height=84,
-            width=84,
+            height=144,
+            width=144,
             data_types=["rgb", "distance_to_image_plane"],
             # spawn=sim_utils.PinholeCameraCfg(
             #     focal_length=2.4, focus_distance=28.0, horizontal_aperture=5.3, clipping_range=(0.1, 2)
@@ -339,94 +233,43 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         )
         self.viewer.eye = (-1.5, -0.3, 1.0)
         self.rerender_on_reset = True
-        # self.sim.render_settings = {
-        #     "rtx/renderMode": "PathTracing",
-        #     "rtx/pathtracing/spp": 1,
-        #     "rtx/pathtracing/totalSpp": 1,
-        #     "rtx/pathtracing/maxBounces": 4,
-        #     "rtx/hydra/enabled": True,
-        # }
+       
         self.sim.render.antialiasing_mode = "OFF"  # disable dlss
-        # self.sim.dt=0.0002
-        # self.sim.render_interval=4
-        #self.sim.render.antialiasing_mode = "DLSS"  # enable dlss for cleaner PathTracing
-
+        
         # List of image observations in policy observations
         self.image_obs_list = ["table_cam", "wrist_cam"]
 
 
-        #self.scene.robot = UR10e_ROBOTIQ_GRIPPER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-        # Create a deep copy to boost the default 0.0 stiffness of the passive gripper joints
-        # import copy
-        # robot_custom_cfg = copy.deepcopy(PANDA_OFFSET_ROBOTIQ_CFG)
-        # if "gripper_passive" in robot_custom_cfg.actuators:
-        #     robot_custom_cfg.actuators["gripper_passive"].stiffness = 11.25
-        #     robot_custom_cfg.actuators["gripper_passive"].effort_limit_sim = 10.0
-        # if "gripper_finger" in robot_custom_cfg.actuators:
-        #     robot_custom_cfg.actuators["gripper_finger"].stiffness = 11.25
-        #     robot_custom_cfg.actuators["gripper_finger"].effort_limit_sim = 10.0
-
-        # self.scene.robot = robot_custom_cfg.replace(
-        #     prim_path="{ENV_REGEX_NS}/Robot",
-        #     init_state=ArticulationCfg.InitialStateCfg(
-        #         joint_pos={
-        #             "panda_joint1": 0.0,
-        #             "panda_joint2": -0.569,
-        #             "panda_joint3": 0.0,
-        #             "panda_joint4": -2.810,
-        #             "panda_joint5": 0.0,
-        #             "panda_joint6": 3.037,
-        #             "panda_joint7": 0.741,
-        #             "finger_joint": 0.0,
-        #             # ".*_inner_finger_joint": 0.0,
-        #             # ".*_inner_finger_pad_joint": 0.0,
-        #             # ".*_outer_.*_joint": 0.0,
-
-        #         },
-        #     ),
-        # )
-
+      
         self.scene.robot=TEST.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
         )
-        # replace with relative position controller 
-        # self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
-        #     asset_name="robot",
-        #     joint_names=[
-        #         "panda_joint1", "panda_joint2", "panda_joint3", 
-        #         "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"
-        #     ],
-        #     body_name="panda_link7",
-        #     controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),
-        #     scale=0.5,
-        #     body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.22]),# rot=[0.7071, -0.7071, 0.0, 0.0]),
-        # )
-
-        # self.actions.gripper_action = mdp.BinaryJointPositionActionCfg(
-        #     asset_name="robot",
-        #     # ONLY target the main driven joint here
-        #     joint_names=["finger_joint"],
-        #     open_command_expr={
-        #         "finger_joint": 0.0,
-        #     },
-        #     close_command_expr={
-        #         # Note: verify if Robotiq 140 takes radians or linear meters in your USD. 
-        #         # If it's radians, 46.0 is way too high. Usually it's ~0.7 to 0.8 radians.
-        #         "finger_joint": 0.7, 
-        #     },
-        # )
+       
 
         self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
             asset_name="robot",
             joint_names=["panda_joint.*"],
             body_name="base_link",  # Robotiq 2F-85 base flange (gripper mount); matches ee_pos/ee_quat helpers
             controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),
-            scale=1.0,
-            body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.0]),
+            scale=0.5,#trained with 0.5
+            #body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.14, 0.0, 0.0]),
             # Robotiq 2F-85 max height base flange -> fingertip is 162.8mm (per Robotiq spec).
             # Uncomment to control the fingertip plane instead of the base flange.
-            # body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.1628]),
+            body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.1628, 0.0, 0.0], rot=[0.5, -0.5, 0.5, -0.5]),
+            
         )
+        # self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
+        #     asset_name="robot",
+        #     joint_names=["panda_joint.*"],
+        #     body_name="base_link",
+        #     controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),
+        #     scale=1.0,
+        #     # Match the TCP offset of your horizontal Robotiq gripper
+        #     body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(
+        #         pos=[0.14, 0.0, 0.0], 
+        #         rot=[0.5, -0.5, 0.5, -0.5]
+        #     ),
+        # )
 
         self.actions.gripper_action = BinaryJointPositionZeroToOneActionCfg(
             asset_name="robot",
@@ -441,19 +284,7 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
         self.gripper_threshold = 0.005
         # Set the body name for the end effector
         self.commands.object_pose.body_name = "panda_link7"
-        # self.scene.ee_frame = FrameTransformerCfg(
-        #     prim_path="{ENV_REGEX_NS}/Robot/panda_link0",  # Removed /franka/
-        #     debug_vis=False,
-        #     target_frames=[
-        #         FrameTransformerCfg.FrameCfg(
-        #             prim_path="{ENV_REGEX_NS}/Robot/panda_link7", # Removed /franka/
-        #             name="end_effector",
-        #             offset=OffsetCfg(
-        #                 pos=[0.0, 0.0, 0.22], 
-        #             ),
-        #         ),
-        #     ],
-        # )
+       
         custom_marker_cfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/FrameTransformer")
         custom_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
 
@@ -462,40 +293,29 @@ class FrankaDevEnvVMCfg(dev_env_cfg.FrankaDevEnvCfg):
             debug_vis=False,
             visualizer_cfg=custom_marker_cfg,
             target_frames=[
-                FrameTransformerCfg.FrameCfg(
-                    prim_path=f"{{ENV_REGEX_NS}}/Robot/franka_robotiq_2f_85_flattened/panda_link{i}",
-                    name=f"panda_link{i}",
-                )
-                for i in range(8)
-            ] + [
-                FrameTransformerCfg.FrameCfg(
-                    prim_path="{ENV_REGEX_NS}/Robot/franka_robotiq_2f_85_flattened/Gripper/Robotiq_2F_85/base_link",
-                    name="gripper_base",
-                ),
+            #     FrameTransformerCfg.FrameCfg(
+            #         prim_path=f"{{ENV_REGEX_NS}}/Robot/franka_robotiq_2f_85_flattened/panda_link{i}",
+            #         name=f"panda_link{i}",
+            #     )
+            #     for i in range(8)
+            # ] + [
+            #     FrameTransformerCfg.FrameCfg(
+            #         prim_path="{ENV_REGEX_NS}/Robot/franka_robotiq_2f_85_flattened/Gripper/Robotiq_2F_85/base_link",
+            #         name="gripper_base",
+            #     ),
                 FrameTransformerCfg.FrameCfg(
                     prim_path="{ENV_REGEX_NS}/Robot/franka_robotiq_2f_85_flattened/Gripper/Robotiq_2F_85/base_link",
                     name="eef_frame",
-                    offset=OffsetCfg(pos=[0.14, 0.0, 0.0], rot=[0.5, -0.5, 0.5, -0.5]),
+                    #offset=OffsetCfg(pos=[0.1628, 0.0, 0.0], rot=[1.0,0,0,0]),
+                    offset=OffsetCfg(pos=[0.1628, 0.0, 0.0], rot=[0.5, -0.5, 0.5, -0.5]),
                 ),
             ],
         )
-        #self.terminations.success=DoneTerm(func=mdp.object_stacked_upright, params={"lower_object_cfg": SceneEntityCfg("scale")})
-
-        #self.observations.subtask_terms.appr_goal=ObsTerm(func=mdp.is_object_lifted, params={"threshold":0.15}
-        #)
+       
       
 
 
-# @configclass
-# class FrankaCubeEnvCfg_PLAY(FrankaDevEnvVMCfg):
-#     def __post_init__(self):
-#         # post init of parent
-#         super().__post_init__()
-#         # make a smaller scene for play
-#         self.scene.num_envs = 50
-#         self.scene.env_spacing = 2.5
-#         # disable randomization for play
-#         self.observations.policy.enable_corruption = False
+#  self.observations.policy.enable_corruption = False
 class BinaryJointPositionZeroToOneAction(mdp.BinaryJointPositionAction):
     # override
     def process_actions(self, actions: torch.Tensor):

@@ -37,9 +37,6 @@ DEFAULT_VIDEO_WIDTH = 1280
 DEFAULT_INPUT_KEYS = [
     "table_cam",
     "wrist_cam",
-    "table_cam_segmentation",
-    "table_cam_normals",
-    "table_cam_shaded_segmentation",
     "table_cam_depth",
 ]
 DEFAULT_FRAMERATE = 30

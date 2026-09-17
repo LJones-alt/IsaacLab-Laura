@@ -1,8 +1,8 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "visuomotor_place_vial_BC_enoder",
-        "validate": true,
+        "name": "visuomotor_place_vial_BC_copied_hyperparams",
+        "validate": false,
         "logging": {
             "terminal_output_to_txt": true,
             "log_tb": true,
@@ -12,9 +12,9 @@
         "save": {
             "enabled": true,
             "every_n_seconds": null,
-            "every_n_epochs": null,
+            "every_n_epochs": 100,
             "epochs": [],
-            "on_best_validation": true,
+            "on_best_validation": false,
             "on_best_rollout_return": true,
             "on_best_rollout_success_rate": true
         },
@@ -39,10 +39,10 @@
         "output_dir": "/workspace/isaaclab/docs/training_runs/bc_rnn",
         "num_data_workers": 0,
         "hdf5_cache_mode": "low_dim",
-        "hdf5_use_swmr": true,
+        "hdf5_use_swmr": false,
         "hdf5_normalize_obs": false,
-        "hdf5_filter_key": "train",
-        "hdf5_validation_filter_key": "valid",
+        "hdf5_filter_key": null,
+        "hdf5_validation_filter_key": null,
         "seq_length": 16,
         "dataset_keys": [
             "actions",
@@ -54,8 +54,8 @@
         ],
         "goal_mode": null,
         "cuda": true,
-        "batch_size": 128,
-        "num_epochs": 1000,
+        "batch_size": 16,
+        "num_epochs": 600,
         "seed": 101
     },
     "algo": {
@@ -64,7 +64,7 @@
                 "optimizer_type": "adam",
                 "learning_rate": {
                     "initial": 0.0001,
-                    "decay_factor": 0.01,
+                    "decay_factor": 0.1,
                     "epoch_schedule": [],
                     "scheduler_type": "multistep"
                 },
@@ -87,8 +87,8 @@
         },
         "rnn": {
             "enabled": true,
-            "horizon": 100,
-            "hidden_dim": 400,
+            "horizon": 16,
+            "hidden_dim": 512,
             "rnn_type": "LSTM",
             "num_layers": 2,
             "open_loop": false,
@@ -107,8 +107,7 @@
                     "object_position",
                     "target_object_position",
                     "joint_pos",
-                    "joint_vel",
-                    "actions"
+                    "joint_vel"
                 ],
                 "rgb": [
                     "table_cam",

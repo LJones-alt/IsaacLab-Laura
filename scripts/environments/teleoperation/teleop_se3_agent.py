@@ -285,6 +285,7 @@ def main() -> None:
                 if teleoperation_active:
                     # process actions
                     actions = action.repeat(env.num_envs, 1).to(env.device)
+                    #print(f"Action: {actions}")
                     # if torch.any(torch.abs(actions) > 0.001):
                     #     print(f"Non-zero action commanded: {actions}")
                     obs, reward, terminated, truncated, info = env.step(actions)
@@ -293,10 +294,34 @@ def main() -> None:
                     # print(f"gripper actions: {actions[:,-1]}")
                     ee_pos = policy_obs['eef_pos']      # (N, 3)
                     ee_quat = policy_obs['eef_quat']    # (N, 4)
+                    print(f"EE Pos: {ee_pos}, EE Quat: {ee_quat}")
                     object_pos = policy_obs['object_position']
 
-                    print(f"EE Pos: {ee_pos}, EE Quat: {ee_quat}, \nOb Pos: {object_pos}")
+                    #print(f"EE Pos: {ee_pos}, EE Quat: {ee_quat}, \nOb Pos: {object_pos}")
                     
+                    obj_pos_root = policy_obs["object_position"][0]  # Shape: (3,)
+                    eef_pos_raw = policy_obs["eef_pos"][0]          # Shape: (3,)
+
+                    # Fetch robot base position relative to environment origin for comparison
+                    robot_base_pos_w = env.scene["robot"].data.root_pos_w[0] - env.scene.env_origins[0, 0:3]
+
+                    # Compute EE position transformed into Robot Root frame
+                    # Note: If robot base quaternion isn't rotated (identity), simple subtraction works:
+                    eef_pos_root = eef_pos_raw - robot_base_pos_w
+
+                    # Compute relative vector (Distance between EE fingertip and Object)
+                    rel_delta = obj_pos_root - eef_pos_root
+
+                    # print("\n" + "=" * 60)
+                    # print(f"[DEBUG FRAME CHECK]")
+                    # print(f"  Robot Base (Env Frame):   {robot_base_pos_w.cpu().numpy().round(4)}")
+                    # print(f"  EE Pos (Raw Env Frame):   {eef_pos_raw.cpu().numpy().round(4)}")
+                    # print(f"  EE Pos (Robot Root Frame):{eef_pos_root.cpu().numpy().round(4)}")
+                    # print(f"  Obj Pos (Robot Root Frame):{obj_pos_root.cpu().numpy().round(4)}")
+                    # print(f"  --------------------------------------------------------")
+                    # print(f"  Delta (Obj - EEF in Root):{rel_delta.cpu().numpy().round(4)}")
+                    # print(f"  Euclidean Distance:       {torch.norm(rel_delta).item():.4f} m")
+                    # print("=" * 60 + "\n")
                     # gripper = actions[:, -1:]
                     # absolute_action = torch.cat([ee_pos, ee_quat, gripper], dim=-1)
                    # print(f"joint positions: {policy_obs['joint_pos']}, gripper pos {policy_obs['eef_pos']}, gripper quat {policy_obs['eef_quat']}")

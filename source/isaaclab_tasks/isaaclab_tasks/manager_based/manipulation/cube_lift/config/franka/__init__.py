@@ -27,6 +27,20 @@ gym.register(
     },
     disable_env_checker=True,
 )
+
+gym.register(
+    id="Dev-joint-vel-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.joint_vel_action_lift_high_res:FrankaDevEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:LiftCubePPORunnerCfg",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
+        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
+        "sb3_cfg_entry_point": f"{agents.__name__}:sb3_ppo_cfg.yaml",
+    },
+    disable_env_checker=True,
+)
+
 gym.register(
     id="Dev-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
@@ -176,10 +190,39 @@ gym.register(
 )
 
 gym.register(
+    id="Dev-IK-Rel-Place-v3",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.dev_ik_rel_vial_lift_high_res:FrankaDevEnvCfg",
+        "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_rnn_low_dim.json"),
+        "robomimic_bc_trans_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_trans.json"),
+        "robomimic_hbc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/hbc.json"),
+        "robomimic_bcq_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bcq.json"),
+        "robomimic_diffusion_policy_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/diffusion_policy.json"),
+
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
     id="Dev-IK-Rel-Place-vision-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
         "env_cfg_entry_point": f"{__name__}.dev_ik_rel_env_place_vismot:FrankaDevEnvVMCfg",
+        "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_rnn_low_dim.json"),
+        "robomimic_bc_trans_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_trans.json"),
+        "robomimic_hbc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/hbc.json"),
+        "robomimic_bcq_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bcq.json"),
+        "robomimic_diffusion_policy_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/diffusion_policy.json"),
+
+    },
+    disable_env_checker=True,
+)
+gym.register(
+    id="Dev-Joint-Pos-Place-vision-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.dev_ik_rel_env_place_vismot_joint_pos:FrankaDevEnvVMCfg",
         "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_rnn_low_dim.json"),
         "robomimic_bc_trans_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_trans.json"),
         "robomimic_hbc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/hbc.json"),
@@ -234,20 +277,6 @@ gym.register(
     disable_env_checker=True,
 )
 
-gym.register(
-    id="Dev-IK-Rel-Insert-v1",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.dev_ik_rel_vial_insert_top_down:FrankaDevEnvCfg",
-        "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_rnn_low_dim.json"),
-        "robomimic_bc_trans_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_trans.json"),
-        "robomimic_hbc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/hbc.json"),
-        "robomimic_bcq_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bcq.json"),
-        "robomimic_diffusion_policy_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/diffusion_policy.json"),
-
-    },
-    disable_env_checker=True,
-)
 
 gym.register(
     id="Dev-IK-Rel-Insert-vision-v0",

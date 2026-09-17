@@ -1216,7 +1216,7 @@ def reset_place_root_state_uniform(
     asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
         # remote iks plate offset
     positions[:,0] += 0.04
-    positions[:,2] -= 0.06
+    positions[:,2] = 0.01
     goal_pose[:,2]=0.0
     asset2.write_root_pose_to_sim(torch.cat([positions, orientations2], dim=-1), env_ids=env_ids)
     asset2.write_root_velocity_to_sim(velocities, env_ids=env_ids)

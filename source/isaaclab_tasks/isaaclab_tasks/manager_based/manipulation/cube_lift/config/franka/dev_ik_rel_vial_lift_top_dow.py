@@ -3,8 +3,9 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+#from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg_MOD
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
-from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
+from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg, DifferentialInverseKinematicsActionCfg_MOD
 from isaaclab.utils import configclass
 from isaaclab.assets import RigidObjectCfg, ArticulationCfg
 from isaaclab.managers import ObservationTermCfg as ObsTerm
@@ -31,7 +32,8 @@ from isaaclab.markers.config import FRAME_MARKER_CFG
 ##
 from isaaclab_assets.robots.franka import FRANKA_PANDA_HIGH_PD_CFG  # isort: skip
 from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG
-
+from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
+from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 
 ## add some cameras in
@@ -108,7 +110,7 @@ class EventCfg():
         func=mdp.reset_place_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (0, 0.2), "y": (0, 0.25), "z": (0.02, 0.02)},
+            "pose_range": {"x": (0.3,0.4), "y": (-0.1,0.3), "z": (0.022, 0.022)},
             "velocity_range": {},
             "asset_cfg": SceneEntityCfg("object", body_names="object"),
             "asset2_cfg" : SceneEntityCfg("stirplate"),
@@ -125,8 +127,8 @@ class ObservationsCfg:
         """Observations for policy group with state values."""
 
         actions = ObsTerm(func=mdp.last_action)
-        joint_pos = ObsTerm(func=mdp.joint_pos_rel)
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel)
+        joint_pos = ObsTerm(func=mdp.joint_pos) # changed from relative to absolute
+        joint_vel = ObsTerm(func=mdp.joint_vel) # changed from relative to absolute
         object_position = ObsTerm(func=mdp.object_position_in_robot_root_frame)
         # cube_positions = ObsTerm(func=mdp.cube_positions_in_world_frame)
         # cube_orientations = ObsTerm(func=mdp.cube_orientations_in_world_frame)
@@ -141,35 +143,35 @@ class ObservationsCfg:
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("wrist_cam"), "data_type": "rgb", "normalize": False}
         )
         #### for cosmos add the segmentation, normals and depth data
-        table_cam_segmentation= ObsTerm(
-            func = mdp.image,
-            params = {
-                "sensor_cfg": SceneEntityCfg("table_cam"),
-                "data_type": "semantic_segmentation",
-                "normalize" : True,
-            }
-        )
+        # table_cam_segmentation= ObsTerm(
+        #     func = mdp.image,
+        #     params = {
+        #         "sensor_cfg": SceneEntityCfg("table_cam"),
+        #         "data_type": "semantic_segmentation",
+        #         "normalize" : True,
+        #     }
+        # )
 
-        table_cam_normals= ObsTerm(
-            func=mdp.image,
-            params={
-                "sensor_cfg": SceneEntityCfg("table_cam"),
-                "data_type" : "normals",
-                "normalize" : True,
-            }
-        )
+        # table_cam_normals= ObsTerm(
+        #     func=mdp.image,
+        #     params={
+        #         "sensor_cfg": SceneEntityCfg("table_cam"),
+        #         "data_type" : "normals",
+        #         "normalize" : True,
+        #     }
+        # )
 
-        table_cam_depth = ObsTerm(
-            func=mdp.image,
-            params={
-                "sensor_cfg": SceneEntityCfg("table_cam"),
-                "data_type": "distance_to_image_plane",
-                "normalize" : True,
-            }
-        )
+        # table_cam_depth = ObsTerm(
+        #     func=mdp.image,
+        #     params={
+        #         "sensor_cfg": SceneEntityCfg("table_cam"),
+        #         "data_type": "distance_to_image_plane",
+        #         "normalize" : True,
+        #     }
+        # )
 
         # for teleop
-        abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
+        #abs_joint_pos = ObsTerm(func=mdp.get_joint_pos)
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -219,10 +221,10 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         import carb
         from isaacsim.core.utils.carb import set_carb_setting
         # Force Path Tracing via Carb
-        set_carb_setting(carb.settings.get_settings(), "/rtx/renderMode", "PathTracing")
-        set_carb_setting(carb.settings.get_settings(), "/rtx/pathtracing/spp", 1)
-        set_carb_setting(carb.settings.get_settings(), "/rtx/pathtracing/totalSpp", 1)
-        
+        # set_carb_setting(carb.settings.get_settings(), "/rtx/renderMode", "PathTracing")
+        # set_carb_setting(carb.settings.get_settings(), "/rtx/pathtracing/spp", 1)
+        # set_carb_setting(carb.settings.get_settings(), "/rtx/pathtracing/totalSpp", 1)
+        set_carb_setting(carb.settings.get_settings(), "/rtx/renderMode", "RayTracing")
         carb_setting = carb.settings.get_settings()
         SEMANTIC_MAPPING = {
             "class:object": (120, 230, 255, 255),
@@ -237,16 +239,48 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         }
         # put the vial on the scale
         glassware = ChemistryGlassware()
-        self.scene.stirplate = glassware.stirplate(pos=[0.5, 0.0, 0.01])
-        #self.scene.scale = glassware.scale(pos=[0.3, -0.3, 0.01])
-        self.scene.scale = glassware.scale(pos=[0.3, -0.3, 0.0])
-        self.scene.object = glassware.capped_vial(pos=[0.5, 0.0, 0.01], scale =1.0, name="object")
+        self.scene.table2 = AssetBaseCfg(
+            prim_path="{ENV_REGEX_NS}/Table2",
+            init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0.75, 0], rot=[1.0, 0, 0, 0]),
+            #init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0], rot=[0.707, 0, 0, 0.707]),
+            spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/ThorlabsTable/table_instanceable.usd"),
+            #spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"),
+        )
+        self.scene.Table3 = AssetBaseCfg(
+            prim_path="{ENV_REGEX_NS}/Table3",
+            init_state=AssetBaseCfg.InitialStateCfg(pos=[0, -0.75, 0], rot=[1.0, 0, 0, 0]),
+            #init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0], rot=[0.707, 0, 0, 0.707]),
+            spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/ThorlabsTable/table_instanceable.usd"),
+            #spawn=UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"),
+        )
+        self.scene.stirplate = glassware.IKAplate(pos=[0.1, 0.0, 0.01])
+        self.scene.scale = glassware.scale(pos=[0.15, -0.4, 0.01])
+        #self.scene.object = glassware.capped_vial(pos=[0.2, 0.0, 0.05], scale =1.0, name="object")
+       ## for dev lets make this a cube...
+        self.scene.object = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/object",
+            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.2, 0, 0.05], rot=[1, 0, 0, 0]),
+            spawn=UsdFileCfg(
+                usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/DexCube/dex_cube_instanceable.usd",
+                scale=(0.8, 0.8, 0.8),
+                rigid_props=RigidBodyPropertiesCfg(
+                    solver_position_iteration_count=16,
+                    solver_velocity_iteration_count=1,
+                    max_angular_velocity=1000.0,
+                    max_linear_velocity=1000.0,
+                    max_depenetration_velocity=5.0,
+                    disable_gravity=False,
+                ),
+            ),
+        )
+
+        
         self.scene.table_cam = CameraCfg(
             prim_path="{ENV_REGEX_NS}/table_cam",
             update_period=0.0,
-            height=96,
-            width=96,
-            data_types=["rgb", "semantic_segmentation", "normals", "distance_to_image_plane"],
+            height=144,
+            width=144,
+            data_types=["rgb"],#, "semantic_segmentation", "normals", "distance_to_image_plane"],
             colorize_semantic_segmentation=True,
             semantic_segmentation_mapping=SEMANTIC_MAPPING,
             spawn=sim_utils.PinholeCameraCfg(
@@ -254,32 +288,28 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
             ),
             ### Where is this in the scene?
             offset=CameraCfg.OffsetCfg(
-                pos=(1.4, 0.0, 0.5), rot=(0.35355, -0.61237, -0.61237, 0.35355), convention="ros"
+                pos=(1.8, 0.0, 0.5), rot=(0.445, -0.54953, -0.54953, 0.445), convention="ros"
             ),
         )
         self.scene.wrist_cam = CameraCfg(
             prim_path="{ENV_REGEX_NS}/Robot/panda_hand/wrist_cam",
             update_period=0.0,
-            height=84,
-            width=84,
-            data_types=["rgb", "distance_to_image_plane"],
+            height=144,
+            width=144,
+            data_types=["rgb"],#, "distance_to_image_plane"],
             spawn=sim_utils.PinholeCameraCfg(
-                focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 2)
+                focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 20)
             ),
             offset=CameraCfg.OffsetCfg(
-                pos=(0.13, 0.0, -0.15), rot=(-0.70614, 0.03701, 0.03701, -0.70614), convention="ros"
+                pos=(0.13, 0.0, -0.15), rot=(-0.70106, 0.0923, 0.0923, -0.70106), convention="ros"
             ),
         )
         self.rerender_on_reset = True
         self.sim.render_settings = {
-            "rtx/renderMode": "PathTracing",
-            "rtx/pathtracing/spp": 1,
-            "rtx/pathtracing/totalSpp": 1,
-            "rtx/pathtracing/maxBounces": 4,
+            "rtx/renderMode": "RayTracing",
             "rtx/hydra/enabled": True,
         }
-        self.sim.render.antialiasing_mode = "OFF"  # disable dlss
-
+        self.sim.render.antialiasing_mode = "DLAA"
         # List of image observations in policy observations
         self.image_obs_list = ["table_cam", "wrist_cam"]
 
@@ -288,14 +318,24 @@ class FrankaDevEnvCfg(dev_env_cfg.FrankaDevEnvCfg):
         self.scene.robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
             init_state=ArticulationCfg.InitialStateCfg(
+                # joint_pos={
+                #     "panda_joint1": 0.0,
+                #     "panda_joint2": -0.569,
+                #     "panda_joint3": 0.0,
+                #     "panda_joint4": -2.810,
+                #     "panda_joint5": 0.0,
+                #     "panda_joint6": 3.037,
+                #     "panda_joint7": 0.741,
+                #     "panda_finger_joint.*": 0.04,
+                # },
                 joint_pos={
                     "panda_joint1": 0.0,
-                    "panda_joint2": -0.569,
-                    "panda_joint3": 0.0,
-                    "panda_joint4": -2.810,
-                    "panda_joint5": 0.0,
-                    "panda_joint6": 3.037,
-                    "panda_joint7": 0.741,
+                    "panda_joint2": -0.6917,
+                    "panda_joint3": 0.0054,
+                    "panda_joint4": -2.4073,
+                    "panda_joint5": -0.0218,
+                    "panda_joint6": 1.7427,
+                    "panda_joint7": 0.7547,
                     "panda_finger_joint.*": 0.04,
                 },
             ),
